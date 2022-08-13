@@ -189,8 +189,119 @@ func isLegalMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_p
         assert piece_color = player_color
     end
 
-    # if move doesn't follow the rule of a chess type, return false
-    let (piece_num2, piece_color2, piece_type2) = getPiece(toIndex)
+    #let (piece_num2, piece_color2, piece_type2) = getPiece(toIndex)
+
+    let toIndexfelt = toIndex.low
+    let fromIndexfelt = fromIndex.low
+    let (comparison) = is_le(toIndexfelt, fromIndexfelt)
+    if comparison == TRUE:
+        let (indexChange : Uint256) = uint256_sub(fromIndex, toIndex)
+    else:
+        let (indexChange : Uint256) = uint256_sub(toIndex, fromIndex)
+    end
+
+    # piece type is 1 for pawn, 2 for rook, 3 for knight, 4 for bishop, 5 for queen, 6 for king
+    # pawns
+    if piece_type == 1:
+        with_attr error_message("Pawns Cannot Move Backwards"):
+            assert comparison = FALSE
+        end
+        # if pawn goes diagnally, check if there is a piece in the way
+        let (indexChange : Uint256) = uint256_sub(toIndex, fromIndex)
+        let indexChangefelt = indexChange.low
+        let bool_7_9 = (indexChangefelt-7)*(indexChangefelt-9)
+
+        if bool_7_9 == 0:
+            # let (isCapturePiece : felt) = isCapture(toIndex)
+            if (isCapture(toIndex)) == FALSE: 
+                return(FALSE)
+            end
+        end
+        # moves one step forward, check validity. 
+
+        if indexChange.low == 8:
+            let (isValidMove : felt) = isValid(toIndex)
+            if isValidMove == FALSE:
+                return(FALSE)
+            end
+        end 
+        # moves two step forward, check validity.
+        if indexChange.low == 16:
+            let (isValidMove_1 : felt) = isValid(toIndex)
+            if isValidMove_1 == FALSE:
+                return(FALSE)
+            end
+            let (isValidMove_2 : felt) = isValid(toIndex - Uint256(8,0))
+            if isValidMove_2 == FALSE:
+                return(FALSE)
+            end
+        end
+    end
+
+    # knight 
+    if piece_type == 4:
+        let possible_moves = Uint256(0x28440,0)
+        let shifted = uint256_shr(possible_moves, indexChange)
+        let res = uint256_and(shifted, Uint256(1,0))
+        # move is not legal
+        if res == 0:
+            return(FALSE)
+        end
+        # check if move is valid
+        let isValidMove = isValid(toIndex)
+        if isValidMove == FALSE:
+            return(FALSE)
+        end
+    end 
+
+    # king 
+    if piece_type == 6:
+        let possible_moves = Uint256(0x382,0)
+        let shifted = uint256_shr(possible_moves, indexChange)
+        let res = uint256_and(shifted, Uint256(1,0))
+        # move is not legal
+        if res == 0:
+            return(FALSE)
+        end
+        # check if move is valid
+        let isValidMove = isValid(toIndex)
+        if isValidMove == FALSE:
+            return(FALSE)
+        end
+    end 
+
+    let bool_lr = searchRay(fromIndex, toIndex, Uint256(1,0))
+    let bool_fb = searchRay(fromIndex, toIndex, Uint256(8,0))
+    let bool_horizontal = bool_lr*bool_fb
+
+    let bool_diag_1 = searchRay(fromIndex, toIndex, Uint256(7,0))
+    let bool_diag_2 = searchRay(fromIndex, toIndex, Uint256(9,0))
+    let bool_diagonal = bool_diag_1*bool_diag_2
+
+    let bool_queen = bool_horizontal + bool_diagonal
+
+    # rook 
+    if piece_type == 2:
+        if bool_horizontal == 0:
+            return(FALSE)
+        end
+    end 
+
+    # bishop
+    if piece_type == 3:
+        if bool_diagonal == 0:
+            return(FALSE)
+        end
+    end
+
+    # queen
+    if piece_type == 5:
+        if bool_queen == 0:
+            return(FALSE)
+        end
+    end
+
+    # use Engine's function to evaluate if the move results in winning or failing.
 
     return(TRUE)
 end
@@ -228,10 +339,11 @@ func isCapture{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr
     
     let (piece_num, piece_color, piece_type) = getPiece(toIndex)
 
+    # check if empty
     if piece_num == 0:
         return(FALSE)
     end
-
+    # check if it's your own piece
     let (player_color) = getPlayerColor()
     if piece_color == player_color:
         return(FALSE)
@@ -241,8 +353,7 @@ func isCapture{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr
 
 end
 
-func isValid{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
-}(toIndex : Uint256) -> (bool : felt):
+func isValid{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*}(toIndex : Uint256) -> (bool : felt):
     # return true if the move is valid
     # input argument board is not necessary bcz we will gonna use storage_val
     alloc_locals

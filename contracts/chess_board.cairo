@@ -5,6 +5,7 @@
 from starkware.cairo.common.alloc import alloc
 from starkware.cairo.common.math import unsigned_div_rem, assert_not_zero
 from starkware.cairo.common.math_cmp import is_le
+from starkware.cairo.common.bitwise import bitwise_xor
 from starkware.cairo.common.cairo_builtins import HashBuiltin, BitwiseBuiltin
 from starkware.cairo.common.find_element import search_sorted
 from starkware.cairo.common.uint256 import (
@@ -20,9 +21,6 @@ from starkware.cairo.common.uint256 import (
     uint256_signed_div_rem,
     Uint256,
 )
-
-# shall we manually define the engine's address here?
-const ENGINE_ADDRESS = 0x0
 
 const TRUE = 1
 const FALSE = 0
@@ -53,9 +51,6 @@ func getPiece{
 }(index : Uint256) -> (piece_num : felt, piece_type : felt, piece_color : felt):
     
     alloc_locals
-    # @Yetta Does every local var have to be declared with 
-    #   'local' var = 3?
-    #   see https://www.cairo-lang.org/docs/reference/syntax.html#locals
     let (getIndex) = getIndexAdjustedBoard(index)
     let (piece : Uint256) = uint256_and(getIndex, Uint256(15, 0))
     # get color and type of the piece; first bit represents color; the next 3 bits represent type
@@ -72,7 +67,6 @@ func getIndexAdjustedBoard{
 }(index : Uint256) -> (indexAdjustedBoard : Uint256):
     alloc_locals
 
-    ## @Yetta: the chess is 6x6, should be less than 35?
     with_attr error_message("index should be less than 63"):
         let (IsIndexBiggerThan63) = uint256_le(index, Uint256(63, 0))
         assert IsIndexBiggerThan63 = TRUE
@@ -99,11 +93,10 @@ func rotate{range_check_ptr, bitwise_ptr : BitwiseBuiltin*}(board : Uint256) -> 
     let (rightShiftedBoard  : Uint256) = uint256_shr(board, Uint256(4, 0))
     # then use recursion with shifted board
     let (rotateBoard : Uint256) = rotate(rightShiftedBoard)
-
     # do the 'rotateBoard >> board & 0xF'
     let (getPiece : Uint256) = uint256_and(board, Uint256(15, 0))
-    let (result : Uint256) = uint256_shr(rotateBoard, getPiece)
-
+    let (mid : Uint256) = uint256_shr(rotateBoard, Uint256(4,0)) # rotateBoard >> 4, right shift 4 bits
+    let (result : Uint256) = uint256_or(mid, getPiece)
     return (result)
 end
 
@@ -140,33 +133,34 @@ func searchRay{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr
     end
 
     let (bool) = checkPathUsingRecursion(rayStart, rayEnd, directionVector)
-
-    return (bool)
+    let (isValidPosition : felt) = isValid(Uint256(rayEnd,0))
+    let res = bool * isValidPosition 
+    return (res)
 end
 
-# @Yetta: is direction vector necessary? can we use the indexChange var directly?
+# direction vector shows the direction a piece can go to
 func checkPathUsingRecursion{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
 }(rayStart : felt, rayEnd : felt, directionVector : felt) -> (
     bool : felt
 ):
     alloc_locals
 
-    let (done) = is_le(rayStart+1,rayEnd)
+    let (done) = is_le(rayStart+1,rayEnd) 
     if done == FALSE:
         return (TRUE)
     end
 
-    let bool = checkPathUsingRecursion(rayStart + directionVector, rayEnd, directionVector)
+    let (bool) = checkPathUsingRecursion(rayStart + directionVector, rayEnd, directionVector)
     
     #check isValidMove
     let (isValidPosition : felt) = isValid(Uint256(rayStart,0))
     #check is there any pieces in the way
     let (adjusted_board : Uint256) = getIndexAdjustedBoard(Uint256(rayStart,0))
     let (isCapturePiece : felt) = isCapture(adjusted_board)
-
-    let (res) = (isValidPosition * isCapturePiece)
-
-    return (res*bool)
+    let (flipCapture : felt) = bitwise_xor(isCapturePiece, 1)
+    let res_mid = isValidPosition*flipCapture
+    let res = res_mid*bool
+    return (res)
 
 end
 
@@ -176,8 +170,10 @@ func isLegalMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_p
 
     # check for out of bound issues
     with_attr error_message("Move Out of Bound"):
-        assert checkInBound(fromIndex) = TRUE
-        assert checkInBound(toIndex) = TRUE
+        let (from_inbound) = checkInBound(fromIndex)
+        let (to_inbound) = checkInBound(toIndex)
+        assert from_inbound = TRUE
+        assert to_inbound = TRUE
     end
 
     let (piece_num, piece_color, piece_type) = getPiece(fromIndex)
@@ -189,12 +185,12 @@ func isLegalMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_p
 
     # check the player does not move a piece of the other player
     with_attr error_message("Cannot Move the Piece of Another Player"):
-        assert piece_color = getPlayerColor()
+        let (player_color) = getPlayerColor()
+        assert piece_color = player_color
     end
 
     # if move doesn't follow the rule of a chess type, return false
     let (piece_num2, piece_color2, piece_type2) = getPiece(toIndex)
-
 
     return(TRUE)
 end
@@ -202,8 +198,10 @@ end
 func checkInBound{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
     }(index : Uint256) -> (bool : felt):
     alloc_locals
-    let (uint_var) = uint256_and(uint256_shr(0x7E7E7E7E7E7E00, index), 1)
-    let (var) = uint_var.low
+    let map = Uint256(0x7E7E7E7E7E7E00,0)
+    let (adjusted_board : Uint256) = uint256_shr(map, index)
+    let (uint_var) = uint256_and(adjusted_board, Uint256(1,0))
+    let var = uint_var.low
     if var != 1:
         return(FALSE)
     end
@@ -215,12 +213,10 @@ func getPlayerColor{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_chec
     alloc_locals
 
     let (board_status : Uint256) = board.read()
-    let (firstpiece : Uint256) = uint256_and(board_status, Uint256(15, 0))
-    # get color and type of the piece; first bit represents color; the next 3 bits represent type
-    let (piece_color : Uint256, piece_type : Uint256) = uint256_signed_div_rem(firstpiece, Uint256(8, 0))
-    let (color) = (piece_color.low)
-    return(color)
+    let(color_uint) = uint256_and(board_status,Uint256(1,0))
+    let color = color_uint.low
 
+    return (color)
 end
 
 func isCapture{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
@@ -245,33 +241,51 @@ func isCapture{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr
 
 end
 
-func isValid(toIndex : Uint256) -> (bool : felt):
+func isValid{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+}(toIndex : Uint256) -> (bool : felt):
     # return true if the move is valid
     # input argument board is not necessary bcz we will gonna use storage_val
     alloc_locals
 
     # if out of bound, return false
     # do (0x7E7E7E7E7E7E00 >> _toIndex) & 1, where the 0x string is the mapping of 0 << 63 | ... | 0 << 0
-    let var1 = uint256_and(uint256_shr(0x7E7E7E7E7E7E00, toIndex), 1)
+    let (var) = checkInBound(toIndex)
     # valid positions are 1 
-    if var1 != 1:
+    if var == FALSE:
         return(FALSE)
     end 
 
     # if the to index is occupied by a chess of the same color, return false
     let (piece_num, piece_color, piece_type) = getPiece(toIndex)
     let (player_color) = getPlayerColor()
-    if piece_num!=0 and piece_color == player_color:
+    if piece_num + piece_color - player_color == piece_num:
         return(FALSE)
     end
 
     return(TRUE)
-    # @Yetta: if move doesn't follow the rule of a chess type, return false
+
 end
 
 
 
 # #=========================================
+
+# @constructor
+# func constructor
+# !!!!!!!! initialize board value 
+
+#                                Black
+#                       00 00 00 00 00 00 00 00                    Black
+#                       00 00 02 05 06 02 03 00                 ♜ ♝ ♛ ♚ ♝ ♜
+#                       00 01 01 01 01 01 01 00                 ♟ ♟ ♟ ♟ ♟ ♟
+#                       00 00 00 00 00 00 00 00     denotes
+#                       00 00 00 00 00 00 00 00    the board
+#                       00 09 09 09 09 09 00 00                 ♙ ♙ ♙ ♙ ♙ ♙
+#                       00 11 12 13 14 12 11 00                 ♖ ♘ ♕ ♔ ♘ ♖
+#                       00 00 00 00 00 00 00 *01*                    White
+#                                White
+
+
 # @contract_interface
 # namespace IEngine:
 #     func makeMove(board:felt) -> (value):

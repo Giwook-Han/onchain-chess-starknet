@@ -24,6 +24,8 @@ from starkware.cairo.common.uint256 import (
 
 const TRUE = 1
 const FALSE = 0
+const initial_board = 331318787292356502577094498346479229205088297258959912939892506624
+# hex: 3256430011111100000000000000000099999900BADECB000000000
 
 # how to assign the board an initial value?
 @storage_var
@@ -377,13 +379,28 @@ func isValid{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, 
 
 end
 
+@contract_interface
+namespace IEngine:
+    func makeMove(board:felt) -> (value):
+    end
+end
 
+@constructor
+func initialize{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+}():
+    #1 0000 0000 0000 0000 0000 0000 0000 0000
+    #2 0000 0011 0010 0101 0110 0100 0011 0000
+    #3 0000 0001 0001 0001 0001 0001 0001 0000
+    #4 0000 0000 0000 0000 0000 0000 0000 0000
+    #5 0000 0000 0000 0000 0000 0000 0000 0000
+    #6 0000 1001 1001 1001 1001 1001 1001 0000
+    #7 0000 1011 1010 1101 1110 1100 1011 0000
+    #8 0000 0000 0000 0000 0000 0000 0000 0000
 
-# #=========================================
-
-# @constructor
-# func constructor
-# !!!!!!!! initialize board value 
+    # binary: 0000000000000000000000000000000000000011001001010110010000110000000000010001000100010001000100000000000000000000000000000000000000000000000000000000000000000000000010011001100110011001100100000000101110101101111011001011000000000000000000000000000000000000
+    let (initial) = 331318787292356502577094498346479229205088297258959912939892506624
+    # hex: 3256430011111100000000000000000099999900BADECB000000000
+end
 
 #                                Black
 #                       00 00 00 00 00 00 00 00                    Black
@@ -397,54 +414,51 @@ end
 #                                White
 
 
-# @contract_interface
-# namespace IEngine:
-#     func makeMove(board:felt) -> (value):
-#     end
-# end
+@external
+func applyMove{
+    syscall_ptr : felt*,
+    pedersen_ptr : HashBuiltin*,
+    range_check_ptr
+    }(fromIndex:Uint256, toIndex:Uint256) -> ():
 
-# @external
-# func applyMove{
-#     syscall_ptr : felt*,
-#     pedersen_ptr : HashBuiltin*,
-#     range_check_ptr
-#     }(fromIndex:Uint256, toIndex:Uint256) -> ():
+    # Get piece at the from index
+     # piece = (board >> ((_move >> 6) << 2)) & 0xF;
+    let (piece_num, piece_color, piece_type) = getPiece(fromIndex)
+    let bool = isLegalMove(fromIndex, toIndex)
 
-# # Get piece at the from index
-#     # piece = (_board >> ((_move >> 6) << 2)) & 0xF;
+    # check if the move is valid
+    with_attr error_message ("Illegal move"):
+        assert bool = 1
+    end
 
-# # check if the move is valid
-#     if isLegalMove(fromIndex, toIndex) == 1:
-#         # apply the move
-#         # board.write()
-#         #// Replace 4 bits at the from index with 0000
-#         _board &= type(uint256).max ^ (0xF << ((_move >> 6) << 2));
-#         #// Replace 4 bits at the to index with 0000
-#         _board &= type(uint256).max ^ (0xF << ((_move & 0x3F) << 2));
-#         # // Place the piece at the to index
-#         _board |= (piece << ((_move & 0x3F) << 2));
-#         board.rotate()
+    # apply the move
+    # Replace 4 bits at the from index with 0000
+    board.write(uint256_or(board.read(), uint256_shl(Uint256(0,0), fromIndex)))
+    # Replace 4 bits at the to index with 0000
+    board.write(uint256_or(board.read(), uint256_shl(Uint256(0,0), toIndex)))
+    # Place the piece at the to index
+    board.write(uint256_or(board.read(), uint256_shl(Uint256(piece_num,0), toIndex)))
+    # rotate the board
+    board.write(rotate(board))
+    
+    IEngine.makeMove(
+            contract_address=ENGINE_ADDRESS, board=board
+        )
+    
+return ()
 
-# IEngine.makeMove(
-#             contract_address=ENGINE_ADDRESS, board=board
-#         )
-#     else:
-#         with_attr error_message ("Illegal move")"):
-#             assert bool = 1
-#         end
-#     end
+    
+end 
 
-# return ()
-# end
+@view
+func getBoardStatus{
+    syscall_ptr : felt*,
+    pedersen_ptr : HashBuiltin*,
+    range_check_ptr
+    }() -> (res:felt):
 
-# @view
-# func getBoardStatus{
-#     syscall_ptr : felt*,
-#     pedersen_ptr : HashBuiltin*,
-#     range_check_ptr
-#     }() -> (res:felt):
+    let (res) = board.read()
+    return(res)
 
-# let (res) = board.read()
-#     return(res)
+end
 
-# end

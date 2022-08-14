@@ -26,6 +26,8 @@ from starkware.cairo.common.uint256 import (
 #bool
 const TRUE = 1
 const FALSE = 0
+const initial_board = 331318787292356502577094498346479229205088297258959912939892506624
+# hex: 3256430011111100000000000000000099999900BADECB000000000
 
 #pieces in chess
 const PWAN = 1
@@ -678,8 +680,126 @@ func isLegalMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_p
         assert piece_color = player_color
     end
 
-    # if move doesn't follow the rule of a chess type, return false
-    let (piece_num2, piece_color2, piece_type2) = getPiece(toIndex)
+    #let (piece_num2, piece_color2, piece_type2) = getPiece(toIndex)
+
+    let toIndexfelt = toIndex.low
+    let fromIndexfelt = fromIndex.low
+    let (comparison) = is_le(toIndexfelt, fromIndexfelt)
+
+    local indexChange
+    let (isCapturePiece) = isCapture(toIndex)
+    let (isValidMove) = isValid(toIndex)
+
+    let toIndexFelt = toIndex.low
+    let toIndexFelt_1 = toIndexFelt - 8
+    let toIndex_1 = Uint256(toIndexFelt_1, 0)
+    let (isValidMove_1) = isValid(toIndex_1)
+
+    #@Yetta: this seemed to work. 
+    if comparison == TRUE:
+        assert indexChange = fromIndex.low - toIndex.low
+    else:
+        assert indexChange = toIndex.low - fromIndex.low
+    end
+
+    # piece type is 1 for pawn, 2 for rook, 3 for knight, 4 for bishop, 5 for queen, 6 for king
+    # pawns
+    if piece_type == 1:
+        with_attr error_message("Pawns Cannot Move Backwards"):
+            assert comparison = FALSE
+        end
+        # if pawn goes diagnally, check if there is a piece in the way
+        let bool_7_9 = (indexChange-7)*(indexChange-9)
+
+        if bool_7_9 == 0:
+            # assert isCapturePiece = isCapture(toIndex)
+            if isCapturePiece == FALSE: 
+                return(FALSE)
+            end
+        end
+
+        # moves one step forward, check validity. 
+        if indexChange == 8:
+            if isValidMove == FALSE:
+                return(FALSE)
+            end
+        end 
+        # moves two step forward, check validity.
+        if indexChange == 16:
+            if isValidMove == FALSE:
+                return(FALSE)
+            end
+            if isValidMove_1 == FALSE:
+                return(FALSE)
+            end
+        end
+    end
+
+    let indexChangeUint =  Uint256(indexChange,0)
+    # knight 
+    let possible_moves_knight = Uint256(0x28440,0)
+    let (shifted_knight : Uint256) = uint256_shr(possible_moves_knight, indexChangeUint)
+    let (resUint_knight : Uint256) = uint256_and(shifted_knight, Uint256(1,0))
+    let res_knight = resUint_knight.low
+    if piece_type == 4:
+        # let possible_moves = Uint256(0x28440,0)
+        # move is not legal
+        if res_knight == 0:
+            return(FALSE)
+        end
+        # check if move is valid
+        if isValidMove == FALSE:
+            return(FALSE)
+        end
+    end 
+
+    # king 
+    let possible_moves_king = Uint256(0x382,0)
+    let (shifted_king : Uint256) = uint256_shr(possible_moves_king, indexChangeUint)
+    let (resUint_king : Uint256) = uint256_and(shifted_king, Uint256(1,0))
+    let res_king = resUint_king.low
+    if piece_type == 6:
+        if res_king == 0:
+            return(FALSE)
+        end
+        # check if move is valid
+        if isValidMove == FALSE:
+            return(FALSE)
+        end
+    end 
+
+    let (bool_lr : felt) = searchRay(fromIndex, toIndex, 1)
+    let (bool_fb : felt) = searchRay(fromIndex, toIndex, 8)
+    let bool_horizontal = bool_lr*bool_fb
+
+    let (bool_diag_1 : felt) = searchRay(fromIndex, toIndex, 7)
+    let (bool_diag_2 : felt) = searchRay(fromIndex, toIndex, 9)
+    let bool_diagonal = bool_diag_1*bool_diag_2
+
+    let bool_queen = bool_horizontal + bool_diagonal
+
+    # rook 
+    if piece_type == 2:
+        if bool_horizontal == 0:
+            return(FALSE)
+        end
+    end 
+
+    # bishop
+    if piece_type == 3:
+        if bool_diagonal == 0:
+            return(FALSE)
+        end
+    end
+
+    # queen
+    if piece_type == 5:
+        if bool_queen == 0:
+            return(FALSE)
+        end
+    end
+
+    # use Engine's function to evaluate if the move results in winning or failing.
 
     return(TRUE)
 end
@@ -717,10 +837,11 @@ func isCapture{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr
     
     let (piece_num, piece_color, piece_type) = getPiece(toIndex)
 
+    # check if empty
     if piece_num == 0:
         return(FALSE)
     end
-
+    # check if it's your own piece
     let (player_color) = getPlayerColor()
     if piece_color == player_color:
         return(FALSE)
@@ -730,8 +851,7 @@ func isCapture{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr
 
 end
 
-func isValid{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
-}(toIndex : Uint256) -> (bool : felt):
+func isValid{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*}(toIndex : Uint256) -> (bool : felt):
     # return true if the move is valid
     # input argument board is not necessary bcz we will gonna use storage_val
     alloc_locals
@@ -755,13 +875,29 @@ func isValid{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, 
 
 end
 
+@contract_interface
+namespace IEngine:
+    func makeMove(board:felt) -> (value):
+    end
+end
 
+@constructor
+func constructor{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+}():
+    #1 0000 0000 0000 0000 0000 0000 0000 0000
+    #2 0000 0011 0010 0101 0110 0100 0011 0000
+    #3 0000 0001 0001 0001 0001 0001 0001 0000
+    #4 0000 0000 0000 0000 0000 0000 0000 0000
+    #5 0000 0000 0000 0000 0000 0000 0000 0000
+    #6 0000 1001 1001 1001 1001 1001 1001 0000
+    #7 0000 1011 1010 1101 1110 1100 1011 0000
+    #8 0000 0000 0000 0000 0000 0000 0000 0000
 
-# #=========================================
-
-# @constructor
-# func constructor
-# !!!!!!!! initialize board value 
+    # binary: 0000000000000000000000000000000000000011001001010110010000110000000000010001000100010001000100000000000000000000000000000000000000000000000000000000000000000000000010011001100110011001100100000000101110101101111011001011000000000000000000000000000000000000
+    let initial = 331318787292356502577094498346479229205088297258959912939892506624
+    # hex: 3256430011111100000000000000000099999900BADECB000000000
+    return()
+end
 
 #                                Black
 #                       00 00 00 00 00 00 00 00                    Black
@@ -774,55 +910,60 @@ end
 #                       00 00 00 00 00 00 00 *01*                    White
 #                                White
 
+@external 
+func applyMove{
+    syscall_ptr : felt*,
+    pedersen_ptr : HashBuiltin*,
+    range_check_ptr,
+    bitwise_ptr : BitwiseBuiltin*
+    }(fromIndex:Uint256, toIndex:Uint256) -> ():
 
-# @contract_interface
-# namespace IEngine:
-#     func makeMove(board:felt) -> (value):
-#     end
-# end
+    alloc_locals
+    # Get piece at the from index
+    # piece = (board >> ((_move >> 6) << 2)) & 0xF;
+    let (piece_num, piece_color, piece_type) = getPiece(fromIndex)
+    let (bool : felt) = isLegalMove(fromIndex, toIndex)
 
-# @external
-# func applyMove{
-#     syscall_ptr : felt*,
-#     pedersen_ptr : HashBuiltin*,
-#     range_check_ptr
-#     }(fromIndex:Uint256, toIndex:Uint256) -> ():
+    # check if the move is valid
+    with_attr error_message ("Illegal move"):
+        assert bool = 1
+    end
 
-# # Get piece at the from index
-#     # piece = (_board >> ((_move >> 6) << 2)) & 0xF;
+    # apply the move
+    # Replace 4 bits at the from index with 0000
+    let (curr_board : Uint256) = board.read()
+    let (from_0 : Uint256) = uint256_shl(Uint256(0,0), fromIndex)
+    let (from_0000 : Uint256) = uint256_or(curr_board, from_0)
+    
+    # Replace 4 bits at the to index with 0000
+    let (to_0 : Uint256) = uint256_shl(Uint256(0,0), toIndex)
+    let (to_0000 : Uint256) = uint256_or(from_0000, to_0)
 
-# # check if the move is valid
-#     if isLegalMove(fromIndex, toIndex) == 1:
-#         # apply the move
-#         # board.write()
-#         #// Replace 4 bits at the from index with 0000
-#         _board &= type(uint256).max ^ (0xF << ((_move >> 6) << 2));
-#         #// Replace 4 bits at the to index with 0000
-#         _board &= type(uint256).max ^ (0xF << ((_move & 0x3F) << 2));
-#         # // Place the piece at the to index
-#         _board |= (piece << ((_move & 0x3F) << 2));
-#         board.rotate()
+    # Place the piece at the to index
+    let (to_piece) = uint256_shl(Uint256(piece_num,0), toIndex)
+    let (board_after_move : Uint256) = uint256_or(to_0000, to_piece)
+    # rotate the board
+    let (board_after_rotate : Uint256) = rotate(board_after_move)
+    board.write(board_after_rotate)
+    
+    # IEngine.makeMove(
+    #         contract_address=ENGINE_ADDRESS, board=board
+    #     )
+    
+return ()
 
-# IEngine.makeMove(
-#             contract_address=ENGINE_ADDRESS, board=board
-#         )
-#     else:
-#         with_attr error_message ("Illegal move")"):
-#             assert bool = 1
-#         end
-#     end
+    
+end 
 
-# return ()
-# end
+@view
+func getBoardStatus{
+    syscall_ptr : felt*,
+    pedersen_ptr : HashBuiltin*,
+    range_check_ptr
+    }() -> (res : Uint256):
 
-# @view
-# func getBoardStatus{
-#     syscall_ptr : felt*,
-#     pedersen_ptr : HashBuiltin*,
-#     range_check_ptr
-#     }() -> (res:felt):
+    let (res) = board.read()
+    return(res)
 
-# let (res) = board.read()
-#     return(res)
+end
 
-# end

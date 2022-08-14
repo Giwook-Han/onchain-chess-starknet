@@ -16,14 +16,25 @@ from starkware.cairo.common.uint256 import (
     uint256_and,
     uint256_le,
     uint256_lt,
+    uint256_add,
     uint256_mul,
     uint256_sub,
     uint256_signed_div_rem,
     Uint256,
 )
 
+#bool
 const TRUE = 1
 const FALSE = 0
+
+#pieces in chess
+const PWAN = 1
+const BISHOP = 2
+const ROOK = 3
+const KNIGHT = 4
+const QUEEN = 5
+const KING = 6
+
 
 # how to assign the board an initial value?
 @storage_var
@@ -35,8 +46,10 @@ end
 #     return(adjusted_index)
 # end
 
+#movesArray's index is starts from 0
+#let's store next empty index of the movesArray in index 0's first 4 bits
 @storage_var
-func movesArray() -> (moves : felt):
+func movesArray(index : felt) -> (moves : Uint256):
 end
 
 # func append(movesArray:felt*) -> ():
@@ -163,6 +176,482 @@ func checkPathUsingRecursion{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, r
     return (res)
 
 end
+
+# generate every possible move
+# let indexOfSquare start from 36 (6*6)
+# let index : Uint256 = Uint256(0x238A179D71B69959551349138D30B289,0xDB5D33CB1BADB2BAA99A59)
+# use single Uint256 and if it is full stor, clear it and start fill it again
+func generateMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*}(indexOfSquare : felt, index : Uint256) -> (movesSoFar : Uint256):
+    alloc_locals
+
+    if indexOfSquare == 0:
+        return (Uint256(0,0))
+    end
+
+    local isFinal
+    if indexOfSquare == 36:
+        assert isFinal = TRUE
+    else:
+        assert isFinal = FALSE
+    end
+
+    #do index >>= 6
+    let (newIndex : Uint256) = uint256_shr(index,Uint256(6,0))
+
+    let (movesSoFar : Uint256) = generateMove(indexOfSquare -1, newIndex)
+ 
+    # get 6bits
+    let (pieceIndex : Uint256) = uint256_and(newIndex,Uint256(63,0))
+    # get piece of it
+    let (_,pieceType,pieceColor) = getPiece(pieceIndex)
+    # get adjustedBoard
+    let (adjustedBoard : Uint256) = getIndexAdjustedBoard(pieceIndex)
+
+    let (nowTurn : Uint256) = uint256_and(newIndex,Uint256(1,0))
+
+    #need to make this clean ;(
+    # if the piece is not there, return
+    # or if the piece color is not mach with trun, return
+    if pieceType == 0:
+        return (movesSoFar)
+    end
+    if pieceColor - nowTurn.low != 0:
+        return (movesSoFar)
+    end
+
+    # if piece is pwan
+    # the tricky part of this is PWAN may can go all of 4 direction(Ldiagnal and Rdiagnal and forward and two steps forward) 
+    # or can go one of that direction or none of that direction.
+    # need to check that using if statment, and should make sure that single Uint256 variable has that information
+    if pieceType == PWAN:
+        # check Diagnal ##################################################################################
+
+        # check diagnal sqr has enemy pieces
+        let (getLeftDiagnalIndex : Uint256) = uint256_and(index,Uint256(28,0)) # 28 = 7 * 4
+        let (canCaptureLeft) = isCapture(getLeftDiagnalIndex)
+
+        # and if it is, add a path
+        #PWAN's legal move
+        local afterCheckLeft : Uint256
+        if canCaptureLeft == TRUE:
+            let (allocValue : Uint256) = appendMoves(movesSoFar,pieceIndex,Uint256(pieceIndex.low+8,0),isFinal)
+            assert (afterCheckLeft) = allocValue
+
+            # avoid revoked refer
+            tempvar syscall_ptr : felt* = syscall_ptr
+            tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+            tempvar range_check_ptr = range_check_ptr
+            tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+        else:
+            assert afterCheckLeft = movesSoFar
+
+            # avoid revoked refer
+            tempvar syscall_ptr : felt* = syscall_ptr
+            tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+            tempvar range_check_ptr = range_check_ptr
+            tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+        end
+
+        # check diagnal sqr has enemy pieces
+        let (getRightDiagnalIndex : Uint256) = uint256_and(index,Uint256(36,0)) # 36 = 9 * 4
+        let (canCaptureRight) = isCapture(getRightDiagnalIndex)
+
+        # and if it is, add a path
+        #PWAN's legal move
+        local afterCheckRight : Uint256
+        if canCaptureRight == TRUE:
+            let (allocValue : Uint256) = appendMoves(afterCheckLeft,pieceIndex,Uint256(pieceIndex.low+8,0),isFinal)
+            assert afterCheckRight = allocValue
+
+            # avoid revoked refer
+            tempvar syscall_ptr : felt* = syscall_ptr
+            tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+            tempvar range_check_ptr = range_check_ptr
+            tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+        else:
+            assert afterCheckRight = afterCheckLeft
+
+            # avoid revoked refer
+            tempvar syscall_ptr : felt* = syscall_ptr
+            tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+            tempvar range_check_ptr = range_check_ptr
+            tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+        end
+
+        # avoid revoked refer
+        tempvar syscall_ptr : felt* = syscall_ptr
+        tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+        tempvar range_check_ptr = range_check_ptr
+        tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+
+        # Check Front Also ###############################################################################
+
+        # check front sqr is empty
+        let (getFrontSquare : Uint256) = uint256_shr(adjustedBoard,Uint256(32,0)) # 32 = 8 * 4
+        let (checkEmpty : Uint256) = uint256_and(getFrontSquare,Uint256(15,0))
+
+        # if front is empty, you should check this is the first time to move this pwan
+        # and if is the first time, check one more step forward and if there is empty, then this pwan can move 2 steps forward
+        if checkEmpty.low == 0:
+            # append this move and get move
+            let (afterCheckFront : Uint256) = appendMoves(afterCheckRight,pieceIndex,Uint256(pieceIndex.low+8,0),isFinal)
+
+            # check this is first move Pwan's Starting Line is 16 to 23 and this value(16 to 23) >> 2 is 2
+            let (isItFirstMove : Uint256) = uint256_shr(pieceIndex,Uint256(3,0))
+            # check 2 steps forward sqr is empty
+            let (get2StepsForwardSquare : Uint256) = uint256_shr(adjustedBoard,Uint256(64,0)) # 64 = 16 * 4
+            let (check2StepsForwardIsEmpty : Uint256) = uint256_and(get2StepsForwardSquare,Uint256(15,0))
+            # isItFirstMove == 2 & check2StepsForwardIsEmpty == 0
+            if (isItFirstMove.low - 2) + check2StepsForwardIsEmpty.low == 0:
+                # let a = (movesSoFar << 12) | fromIndex << 6 | toIndex
+                let (res : Uint256) = appendMoves(afterCheckFront,pieceIndex,Uint256(pieceIndex.low+8,0),isFinal)
+                
+                # avoid revoked refer
+                tempvar syscall_ptr : felt* = syscall_ptr
+                tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+                tempvar range_check_ptr = range_check_ptr
+                tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+
+                return (res)
+            else:
+                # avoid revoked refer
+                tempvar syscall_ptr : felt* = syscall_ptr
+                tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+                tempvar range_check_ptr = range_check_ptr
+                tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+
+                return (afterCheckFront)
+            end
+        else:
+            # avoid revoked refer
+            tempvar syscall_ptr : felt* = syscall_ptr
+            tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+            tempvar range_check_ptr = range_check_ptr
+            tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+            
+            return (afterCheckRight)
+        end
+
+    else:
+        # if piece is knight or king
+        if (pieceType - KNIGHT)*(pieceType - KING) == 0:
+            # Piece is a knight or a king.
+            # Knights and kings always only have 8 positions to check relative to their
+            # current position, and the relative distances are always the same. For
+            # knights, positions to check are ±{6, 10, 15, 17}. This is bitpacked into
+            # `0x060A0F11` to reduce code redundancy. Similarly, the positions to check for
+            # kings are ±{1, 7, 8, 9}, which is `0x01070809` when bitpacked.
+            local directions : Uint256
+
+            if pieceType == KNIGHT:
+                assert directions = Uint256(0x060A0F11,0)
+                let (mid,_) = checkKnightNKingsMove(pieceIndex,directions,movesSoFar,'ADD',FALSE)
+                let (res,_) = checkKnightNKingsMove(pieceIndex,directions,mid,'SUB',isFinal)
+                
+                # avoid revoked refer
+                tempvar syscall_ptr : felt* = syscall_ptr
+                tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+                tempvar range_check_ptr = range_check_ptr
+                tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+
+                # finish to find every possible wa
+                return (res)
+            else:
+                assert directions = Uint256(0x060A0F11,0)
+                let (mid,_) = checkKnightNKingsMove(pieceIndex,directions,movesSoFar,'ADD',FALSE)
+                let (res,_) = checkKnightNKingsMove(pieceIndex,directions,mid,'SUB',isFinal)
+
+                return (res)
+            end
+
+
+        # other all sliding pieces
+        else:
+            if pieceType == ROOK:
+            
+                # Check straight moves
+                # each index has 4 bits so do *4 every direction
+
+                #check right straight moves
+                let (checkRightWay : Uint256) = checkSlidingPiecesMove(pieceIndex,1*4,movesSoFar,FALSE)
+                #check left straight moves
+                let (checkLeftWay : Uint256) = checkSlidingPiecesMove(pieceIndex,-1*4,checkRightWay,FALSE)                
+                #check upper straight moves
+                let (checkUpperWay : Uint256) = checkSlidingPiecesMove(pieceIndex,8*4,checkLeftWay,FALSE)                
+                #check lower straight moves
+                let (checkRightWay : Uint256) = checkSlidingPiecesMove(pieceIndex,-8*4,checkUpperWay,isFinal)
+
+                return (checkRightWay)
+            end
+
+            if pieceType == BISHOP:
+            
+                # Check diagnal moves
+                # each index has 4 bits so do *4 every direction
+
+                #check upper right straight moves
+                let (checkUpperRightWay : Uint256) = checkSlidingPiecesMove(pieceIndex,9*4,movesSoFar,FALSE)
+                #check upper left straight moves
+                let (checkUpperLeftWay : Uint256) = checkSlidingPiecesMove(pieceIndex,7*4,checkUpperRightWay,FALSE)                
+                #check lower right straight moves
+                let (checkLowerRightWay : Uint256) = checkSlidingPiecesMove(pieceIndex,-9*4,checkUpperLeftWay,FALSE)                
+                #check lower left straight moves
+                let (checkLowerLeftWay : Uint256) = checkSlidingPiecesMove(pieceIndex,-7*4,checkLowerRightWay,isFinal)
+
+                return (checkLowerLeftWay)
+            end
+
+            if pieceType == QUEEN:
+            
+                # Check diagnal + straight moves
+                # each index has 4 bits so do *4 every direction
+
+                #check right straight moves
+                let (checkRightWay : Uint256) = checkSlidingPiecesMove(pieceIndex,1*4,movesSoFar,FALSE)
+                #check left straight moves
+                let (checkLeftWay : Uint256) = checkSlidingPiecesMove(pieceIndex,-1*4,checkRightWay,FALSE)                
+                #check upper straight moves
+                let (checkUpperWay : Uint256) = checkSlidingPiecesMove(pieceIndex,8*4,checkLeftWay,FALSE)                
+                #check lower straight moves
+                let (checkLowerWay : Uint256) = checkSlidingPiecesMove(pieceIndex,-8*4,checkUpperWay,isFinal)
+                #check upper right straight moves
+                let (checkUpperRightWay : Uint256) = checkSlidingPiecesMove(pieceIndex,9*4,checkLowerWay,FALSE)
+                #check upper left straight moves
+                let (checkUpperLeftWay : Uint256) = checkSlidingPiecesMove(pieceIndex,7*4,checkUpperRightWay,FALSE)                
+                #check lower right straight moves
+                let (checkLowerRightWay : Uint256) = checkSlidingPiecesMove(pieceIndex,-9*4,checkUpperLeftWay,FALSE)                
+                #check lower left straight moves
+                let (checkLowerLeftWay : Uint256) = checkSlidingPiecesMove(pieceIndex,-7*4,checkLowerRightWay,isFinal)
+
+                return (checkLowerLeftWay)
+            end
+
+            # avoid revoked refer
+            tempvar syscall_ptr : felt* = syscall_ptr
+            tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+            tempvar range_check_ptr = range_check_ptr
+            tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+        end
+        
+            #if this code is exequte, that mean this function has an error lol
+            with_attr error_message("Check generateMove function"):
+                assert 1 = 0
+            end
+        return (Uint256(0,0))
+    end
+
+end
+
+# check pieces valid moves
+func checkKnightNKingsMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*}(pieceIndex : Uint256, directions : Uint256, movesSoFar : Uint256, addOrSub : felt ,isFinal : felt) -> (newMoveInfo : Uint256, lastVaildMove : Uint256):
+    alloc_locals
+    #check direction is empty
+    if directions.low == 0:
+        return (movesSoFar,Uint256(0,0))
+    end 
+    # check is this last time to call appendMoves function and is this the last recursion
+    local isItFinal
+    if isFinal == TRUE:
+        assert isItFinal = TRUE
+    else:
+        assert isItFinal = FALSE
+    end
+
+    # direction >> 8
+    let (newDirections : Uint256) = uint256_shr(directions,Uint256(8,0))
+    # call recursively
+    let (newMoves : Uint256, lastMove : Uint256) = checkKnightNKingsMove(pieceIndex, newDirections, movesSoFar, addOrSub, FALSE)
+
+    # get 8 bits from directions, which is single direction
+    let (direction : Uint256) = uint256_and(directions,Uint256(0xFF,0))
+    # and add to pieceIndex so that can get a destination's index
+    local destination : Uint256
+    if addOrSub == 'ADD':
+        let (getDestination : Uint256,_) = uint256_add(pieceIndex,direction)
+        assert destination = getDestination
+    else:
+        let (getDestination : Uint256,_) = uint256_add(pieceIndex,direction)
+        assert destination = getDestination
+    end
+
+    local afterCheckLastMove : Uint256
+    local afterCheckValid : Uint256
+    
+    let (checkValid : felt) = isValid(destination)
+    if checkValid == TRUE:
+        let (allocMoves : Uint256) = appendMoves(newMoves,pieceIndex,destination,isItFinal)
+        assert afterCheckValid = allocMoves
+        # store last move
+        assert afterCheckLastMove = destination
+
+        # avoid revoked refer
+        tempvar syscall_ptr : felt* = syscall_ptr
+        tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+        tempvar range_check_ptr = range_check_ptr
+        tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+    else:
+        assert afterCheckValid = newMoves
+        # point last move
+        assert afterCheckLastMove = lastMove
+
+
+        # if this is last chance to call appendMoves function BUT if not a Valid move
+        # then store last vaild move to storage_val
+        if isItFinal == 1:
+            # remove last stored move (6 bits fromIndex, 6 bits toIndex 12bits total)
+            let (toStoreMoves : Uint256) = uint256_shr(afterCheckValid,Uint256(12,0))
+            let (res : Uint256) = appendMoves(newMoves,pieceIndex,lastMove,isItFinal)
+            
+            # avoid revoked refer
+            tempvar syscall_ptr : felt* = syscall_ptr
+            tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+            tempvar range_check_ptr = range_check_ptr
+            tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+        else:
+
+            # avoid revoked refer
+            tempvar syscall_ptr : felt* = syscall_ptr
+            tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+            tempvar range_check_ptr = range_check_ptr
+            tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+        end
+
+    end
+
+    return (afterCheckValid,afterCheckLastMove)
+end
+
+# check sliding pieces avaliable move
+func checkSlidingPiecesMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*}(pieceIndex : Uint256, direction : felt, movesSoFar : Uint256,isFinal : felt) -> (newMoveInfo : Uint256):
+    alloc_locals
+
+    local isItFinal
+    if isFinal == TRUE:
+        assert isItFinal = TRUE
+    else:
+        assert isItFinal = FALSE
+    end
+    
+    let (checkIsVaild) = isValid(Uint256(pieceIndex.low + direction,0))
+    # if it is not valid move, return it
+    if checkIsVaild == FALSE:
+        return (movesSoFar)
+    end
+
+    let (checkIsCapture) = isCapture(Uint256(pieceIndex.low + direction,0))
+    # if it is capture move, store Data and return it
+    if checkIsCapture == TRUE:
+        let (res : Uint256) = appendMoves(movesSoFar, pieceIndex, Uint256(pieceIndex.low + direction,0),isItFinal)
+        return (res)
+    end
+
+    # if it is valid and also not capture any pieces, check next direction.
+    let (newMoveInfo : Uint256) = checkSlidingPiecesMove(Uint256(pieceIndex.low + direction,0),direction + direction,movesSoFar,FALSE)
+
+    # and also append this move
+    let (result : Uint256) = appendMoves(movesSoFar, pieceIndex, Uint256(pieceIndex.low + direction,0),isItFinal)
+
+    return (result)
+
+end
+
+
+# apped moves to storage_val if movesArray is full or the final appends
+# moveInfo is single Uint256 that moves is stored
+func appendMoves{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*}(moveInfo : Uint256, fromIndex : Uint256, toIndex : Uint256, is_final : felt) -> (newMoveInfo : Uint256):
+    alloc_locals
+
+    let (checkIsFull : Uint256) = uint256_shr(moveInfo,Uint256(246,0))
+    # if checkIsFull.low != 0 then moveInfo is full and if it's full we need to store that value
+    if checkIsFull.low != 0:
+        # let's store last index of the movesArray in index 0's first 4 bits
+        let (getIndexArray : Uint256) = movesArray.read(0)
+        # do (getIndexArray >> 252) & 0xF this give me to the last index of the 
+        let (getIndex : Uint256) = uint256_shr(getIndexArray,Uint256(252,0))
+        let (index : Uint256) = uint256_and(getIndex,Uint256(15,0))
+
+        # write it to the storage
+        movesArray.write(index.low,moveInfo)
+
+        # make index + 1 and store to the index 0's first 4 bits
+        let (newIndex : Uint256) = uint256_shl(Uint256(index.low+1,0),Uint256(252,0)) #is this should be 251? 
+        #make Uint256 that only first 4 bits are 0 and the other are 1
+        let toEraseIndex : Uint256 = Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,0x0FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+        # do (getIndexArray & toEraseIndex) | newIndex
+        let (erasedIndex : Uint256) = uint256_and(getIndexArray,toEraseIndex)
+        let (completeUint : Uint256) = uint256_or(erasedIndex,newIndex)
+        # write a new index
+        movesArray.write(0,completeUint)
+
+        # make new moveInfo Instance
+        let makeNewMoveInfo : Uint256 = Uint256(fromIndex.low,0)
+        let (newMoveInfo : Uint256) = uint256_shl(makeNewMoveInfo, Uint256(6,0))
+        let (res : Uint256) = uint256_or(newMoveInfo,Uint256(toIndex.low,0))
+
+        # avoid revoked refer
+        tempvar syscall_ptr : felt* = syscall_ptr
+        tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+        tempvar range_check_ptr = range_check_ptr
+        tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+
+        return (res)
+    # if not, it means that moveInfo is not full so you can insert moves
+    else:
+        # moveInfo << 12
+        let (shl2MoveInfo : Uint256) = uint256_shl(moveInfo,Uint256(12,0))
+        # make move ((fromIndex << 6) | toIndex)
+        let (shl2FromIndex : Uint256) = uint256_shl(fromIndex,Uint256(6,0))
+        let (move : Uint256) = uint256_or(shl2FromIndex,toIndex)
+
+        let (res : Uint256) = uint256_or(shl2MoveInfo,move)
+
+        # indexOfSquare's max value is 36 (board is 6*6)
+        # so if indexOfSquare value is 36, this is the last time to call this function
+        # so need to store value to the storage_val
+        if is_final == TRUE: 
+            # let's store last index of the movesArray in index 0's first 4 bits
+            let (getIndexArray : Uint256) = movesArray.read(0)
+            # do (getIndexArray >> 252) & 0xF this give me to the last index of the 
+            let (getIndex : Uint256) = uint256_shr(getIndexArray,Uint256(252,0))
+            let (index : Uint256) = uint256_and(getIndex,Uint256(15,0))
+
+            # write it to the storage
+            movesArray.write(index.low,moveInfo)
+
+            # make index + 1 and store to the index 0's first 4 bits
+            let (newIndex : Uint256) = uint256_shl(Uint256(index.low+1,0),Uint256(252,0)) #is this should be 251? 
+            #make Uint256 that only first 4 bits are 0 and the other are 1
+            let toEraseIndex : Uint256 = Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,0x0FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+            # do (getIndexArray & toEraseIndex) | newIndex
+            let (erasedIndex : Uint256) = uint256_and(getIndexArray,toEraseIndex)
+            let (completeUint : Uint256) = uint256_or(erasedIndex,newIndex)
+            # write a new index
+            movesArray.write(0,completeUint)
+
+            # avoid revoked refer
+            tempvar syscall_ptr : felt* = syscall_ptr
+            tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+            tempvar range_check_ptr = range_check_ptr
+            tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+
+        else:
+            # avoid revoked refer
+            tempvar syscall_ptr : felt* = syscall_ptr
+            tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+            tempvar range_check_ptr = range_check_ptr
+            tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+        end
+
+        # avoid revoked refer
+        tempvar syscall_ptr : felt* = syscall_ptr
+        tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+        tempvar range_check_ptr = range_check_ptr
+        tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+        
+        return (res)
+    end
+end
+
 
 func isLegalMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
     }(fromIndex : Uint256, toIndex : Uint256) -> (bool : felt):

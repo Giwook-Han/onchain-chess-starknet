@@ -196,10 +196,21 @@ func isLegalMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_p
     let toIndexfelt = toIndex.low
     let fromIndexfelt = fromIndex.low
     let (comparison) = is_le(toIndexfelt, fromIndexfelt)
+
+    local indexChange
+    let (isCapturePiece) = isCapture(toIndex)
+    let (isValidMove) = isValid(toIndex)
+
+    let toIndexFelt = toIndex.low
+    let toIndexFelt_1 = toIndexFelt - 8
+    let toIndex_1 = Uint256(toIndexFelt_1, 0)
+    let (isValidMove_1) = isValid(toIndex_1)
+
+    #@Yetta: this seemed to work. 
     if comparison == TRUE:
-        let (indexChange : Uint256) = uint256_sub(fromIndex, toIndex)
+        assert indexChange = fromIndex.low - toIndex.low
     else:
-        let (indexChange : Uint256) = uint256_sub(toIndex, fromIndex)
+        assert indexChange = toIndex.low - fromIndex.low
     end
 
     # piece type is 1 for pawn, 2 for rook, 3 for knight, 4 for bishop, 5 for queen, 6 for king
@@ -209,75 +220,71 @@ func isLegalMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_p
             assert comparison = FALSE
         end
         # if pawn goes diagnally, check if there is a piece in the way
-        let (indexChange : Uint256) = uint256_sub(toIndex, fromIndex)
-        let indexChangefelt = indexChange.low
-        let bool_7_9 = (indexChangefelt-7)*(indexChangefelt-9)
+        let bool_7_9 = (indexChange-7)*(indexChange-9)
 
         if bool_7_9 == 0:
-            # let (isCapturePiece : felt) = isCapture(toIndex)
-            if (isCapture(toIndex)) == FALSE: 
+            # assert isCapturePiece = isCapture(toIndex)
+            if isCapturePiece == FALSE: 
                 return(FALSE)
             end
         end
-        # moves one step forward, check validity. 
 
-        if indexChange.low == 8:
-            let (isValidMove : felt) = isValid(toIndex)
+        # moves one step forward, check validity. 
+        if indexChange == 8:
             if isValidMove == FALSE:
                 return(FALSE)
             end
         end 
         # moves two step forward, check validity.
-        if indexChange.low == 16:
-            let (isValidMove_1 : felt) = isValid(toIndex)
-            if isValidMove_1 == FALSE:
+        if indexChange == 16:
+            if isValidMove == FALSE:
                 return(FALSE)
             end
-            let (isValidMove_2 : felt) = isValid(toIndex - Uint256(8,0))
-            if isValidMove_2 == FALSE:
+            if isValidMove_1 == FALSE:
                 return(FALSE)
             end
         end
     end
 
+    let indexChangeUint =  Uint256(indexChange,0)
     # knight 
+    let possible_moves_knight = Uint256(0x28440,0)
+    let (shifted_knight : Uint256) = uint256_shr(possible_moves_knight, indexChangeUint)
+    let (resUint_knight : Uint256) = uint256_and(shifted_knight, Uint256(1,0))
+    let res_knight = resUint_knight.low
     if piece_type == 4:
-        let possible_moves = Uint256(0x28440,0)
-        let shifted = uint256_shr(possible_moves, indexChange)
-        let res = uint256_and(shifted, Uint256(1,0))
+        # let possible_moves = Uint256(0x28440,0)
         # move is not legal
-        if res == 0:
+        if res_knight == 0:
             return(FALSE)
         end
         # check if move is valid
-        let isValidMove = isValid(toIndex)
         if isValidMove == FALSE:
             return(FALSE)
         end
     end 
 
     # king 
+    let possible_moves_king = Uint256(0x382,0)
+    let (shifted_king : Uint256) = uint256_shr(possible_moves_king, indexChangeUint)
+    let (resUint_king : Uint256) = uint256_and(shifted_king, Uint256(1,0))
+    let res_king = resUint_king.low
     if piece_type == 6:
-        let possible_moves = Uint256(0x382,0)
-        let shifted = uint256_shr(possible_moves, indexChange)
-        let res = uint256_and(shifted, Uint256(1,0))
-        # move is not legal
-        if res == 0:
+        if res_king == 0:
             return(FALSE)
         end
         # check if move is valid
-        let isValidMove = isValid(toIndex)
         if isValidMove == FALSE:
             return(FALSE)
         end
     end 
 
-    let bool_lr = searchRay(fromIndex, toIndex, Uint256(1,0))
-    let bool_fb = searchRay(fromIndex, toIndex, Uint256(8,0))
+    let (bool_lr : felt) = searchRay(fromIndex, toIndex, 1)
+    let (bool_fb : felt) = searchRay(fromIndex, toIndex, 8)
     let bool_horizontal = bool_lr*bool_fb
 
-    let bool_diag_1 = searchRay(fromIndex, toIndex, Uint256(7,0))
-    let bool_diag_2 = searchRay(fromIndex, toIndex, Uint256(9,0))
+    let (bool_diag_1 : felt) = searchRay(fromIndex, toIndex, 7)
+    let (bool_diag_2 : felt) = searchRay(fromIndex, toIndex, 9)
     let bool_diagonal = bool_diag_1*bool_diag_2
 
     let bool_queen = bool_horizontal + bool_diagonal
@@ -386,7 +393,7 @@ namespace IEngine:
 end
 
 @constructor
-func initialize{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+func constructor{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
 }():
     #1 0000 0000 0000 0000 0000 0000 0000 0000
     #2 0000 0011 0010 0101 0110 0100 0011 0000
@@ -398,8 +405,9 @@ func initialize{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_pt
     #8 0000 0000 0000 0000 0000 0000 0000 0000
 
     # binary: 0000000000000000000000000000000000000011001001010110010000110000000000010001000100010001000100000000000000000000000000000000000000000000000000000000000000000000000010011001100110011001100100000000101110101101111011001011000000000000000000000000000000000000
-    let (initial) = 331318787292356502577094498346479229205088297258959912939892506624
+    let initial = 331318787292356502577094498346479229205088297258959912939892506624
     # hex: 3256430011111100000000000000000099999900BADECB000000000
+    return()
 end
 
 #                                Black
@@ -413,18 +421,19 @@ end
 #                       00 00 00 00 00 00 00 *01*                    White
 #                                White
 
-
-@external
+@external 
 func applyMove{
     syscall_ptr : felt*,
     pedersen_ptr : HashBuiltin*,
-    range_check_ptr
+    range_check_ptr,
+    bitwise_ptr : BitwiseBuiltin*
     }(fromIndex:Uint256, toIndex:Uint256) -> ():
 
+    alloc_locals
     # Get piece at the from index
-     # piece = (board >> ((_move >> 6) << 2)) & 0xF;
+    # piece = (board >> ((_move >> 6) << 2)) & 0xF;
     let (piece_num, piece_color, piece_type) = getPiece(fromIndex)
-    let bool = isLegalMove(fromIndex, toIndex)
+    let (bool : felt) = isLegalMove(fromIndex, toIndex)
 
     # check if the move is valid
     with_attr error_message ("Illegal move"):
@@ -433,17 +442,24 @@ func applyMove{
 
     # apply the move
     # Replace 4 bits at the from index with 0000
-    board.write(uint256_or(board.read(), uint256_shl(Uint256(0,0), fromIndex)))
-    # Replace 4 bits at the to index with 0000
-    board.write(uint256_or(board.read(), uint256_shl(Uint256(0,0), toIndex)))
-    # Place the piece at the to index
-    board.write(uint256_or(board.read(), uint256_shl(Uint256(piece_num,0), toIndex)))
-    # rotate the board
-    board.write(rotate(board))
+    let (curr_board : Uint256) = board.read()
+    let (from_0 : Uint256) = uint256_shl(Uint256(0,0), fromIndex)
+    let (from_0000 : Uint256) = uint256_or(curr_board, from_0)
     
-    IEngine.makeMove(
-            contract_address=ENGINE_ADDRESS, board=board
-        )
+    # Replace 4 bits at the to index with 0000
+    let (to_0 : Uint256) = uint256_shl(Uint256(0,0), toIndex)
+    let (to_0000 : Uint256) = uint256_or(from_0000, to_0)
+
+    # Place the piece at the to index
+    let (to_piece) = uint256_shl(Uint256(piece_num,0), toIndex)
+    let (board_after_move : Uint256) = uint256_or(to_0000, to_piece)
+    # rotate the board
+    let (board_after_rotate : Uint256) = rotate(board_after_move)
+    board.write(board_after_rotate)
+    
+    # IEngine.makeMove(
+    #         contract_address=ENGINE_ADDRESS, board=board
+    #     )
     
 return ()
 
@@ -455,7 +471,7 @@ func getBoardStatus{
     syscall_ptr : felt*,
     pedersen_ptr : HashBuiltin*,
     range_check_ptr
-    }() -> (res:felt):
+    }() -> (res : Uint256):
 
     let (res) = board.read()
     return(res)

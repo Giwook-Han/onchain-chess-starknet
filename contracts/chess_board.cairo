@@ -55,6 +55,14 @@ end
 func movesArray(index : felt) -> (moves : Uint256):
 end
 
+@view
+func getMovesArray{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr
+}(index : felt) -> (move : Uint256):
+    let (res) = movesArray.read(index)
+    return (res)
+end
+
+
 # func append(movesArray:felt*) -> ():
 # end
 
@@ -78,8 +86,7 @@ end
 #getIndexAdjustedBoard
 # this function gets the adjusted board sequence
 # where the requested index is in the first 4 digits. 
-func getIndexAdjustedBoard{
-    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+func getIndexAdjustedBoard{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
 }(index : Uint256) -> (indexAdjustedBoard : Uint256):
     alloc_locals
 

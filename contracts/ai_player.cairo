@@ -299,31 +299,41 @@ func evaluateMove{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_p
                 tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
             end
         end
+    else:
+            tempvar syscall_ptr : felt* = syscall_ptr
+            tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+            tempvar range_check_ptr = range_check_ptr
+            tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
     end
+
+    tempvar syscall_ptr : felt* = syscall_ptr
+    tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+    tempvar range_check_ptr = range_check_ptr
+    tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
 
     # (getPst(pieceAtFromIndex) >> (7 * fromIndex)) & 0x7F
     let temp4 : felt = 7 * fromIndex.low
     let temp4uint = Uint256(temp4,0)
-    let o1_uint = uint256_shr(pst_value_from, temp4uint)
+    let (o1_uint : Uint256) = uint256_shr(pst_value_from, temp4uint)
     let o1 : Uint256 = uint256_and(o1_uint, Uint256(0x7F,0))
 
     # (getPst(pieceAtFromIndex) >> (7 * toIndex)) & 0x7F;
     let temp5 : felt = 7 * toIndex.low
     let temp5uint = Uint256(temp5,0)
-    let n1_uint = uint256_shr(pst_value_from, temp5uint)
+    let (n1_uint : Uint256) = uint256_shr(pst_value_from, temp5uint)
     let n1 : Uint256 = uint256_and(n1_uint, Uint256(0x7F,0))
 
     # (getPstTwo(pieceAtFromIndex) >> (0xC * fromIndex)) & 0xFFF
     let temp6 : felt = 0xC * fromIndex.low
     let temp6uint = Uint256(temp6,0)
-    let o2_uint = uint256_shr(pst_value_from_2, temp6uint)
+    let (o2_uint : Uint256)  = uint256_shr(pst_value_from_2, temp6uint)
     let o2 : Uint256 = uint256_and(o2_uint, Uint256(0xFFF,0))
 
     # (getPst(pieceAtFromIndex) >> (0xC * (fromIndex - 0x12))) & 0xFFF
     let temp7 : felt = 0xC * (fromIndex.low - 0x12)
     let temp7uint = Uint256(temp7,0)
-    let o3_uint = uint256_shr(pst_value_from, temp7uint)
-    let o3 : Uint256 = uint256_and(n2_uint, Uint256(0xFFF,0))
+    let (o3_uint : Uint256) = uint256_shr(pst_value_from, temp7uint)
+    let o3 : Uint256 = uint256_and(o3_uint, Uint256(0xFFF,0))
 
     let (bool3 : felt) = is_le(piece_type_from,4)
     if bool3==TRUE:
@@ -340,7 +350,7 @@ func evaluateMove{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_p
         let (bool4 : felt) = is_le(fromIndex.low,17)
         if bool4==TRUE:
             assert oldPst = o2.low
-            
+
             tempvar syscall_ptr : felt* = syscall_ptr
             tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
             tempvar range_check_ptr = range_check_ptr
@@ -355,18 +365,24 @@ func evaluateMove{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_p
             tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
 
         end
+
     end
+
+    tempvar syscall_ptr : felt* = syscall_ptr
+    tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
+    tempvar range_check_ptr = range_check_ptr
+    tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
 
     # (getPstTwo(pieceAtFromIndex) >> (0xC * toIndex)) & 0xFFF
     let temp8 : felt = 0xC * toIndex.low
     let temp8uint = Uint256(temp8,0)
-    let n2_uint = uint256_shr(pst_value_from_2, temp8uint)
+    let (n2_uint : Uint256) = uint256_shr(pst_value_from_2, temp8uint)
     let n2 : Uint256 = uint256_and(n2_uint, Uint256(0xFFF,0))
 
     # (getPst(pieceAtFromIndex) >> (0xC * (toIndex - 0x12))) & 0xFFF
     let temp9 : felt = 0xC * (toIndex.low - 0x12)
     let temp9uint = Uint256(temp9,0)
-    let n3_uint = uint256_shr(pst_value_from, temp9uint)
+    let n3_uint : Uint256 = uint256_shr(pst_value_from, temp9uint)
     let n3 : Uint256 = uint256_and(n3_uint, Uint256(0xFFF,0))
 
     let (bool5 : felt) = is_le(toIndex.low,17)
@@ -384,51 +400,29 @@ func getPst{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr,bi
 }(type : Uint256) -> (res : Uint256):
 
     alloc_locals
-    if type == 1: 
-        return(0x2850A142850F1E3C78F1E2858C182C50A943468A152A788103C54A142850A14)
-            tempvar syscall_ptr : felt* = syscall_ptr
-            tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
-            tempvar range_check_ptr = range_check_ptr
-            tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+    if type.low == 1: 
+        return(Uint256(0x0A943468A152A788103C54A142850A14, 0x2850A142850F1E3C78F1E2858C182C5))
 
     end 
 
-    if type == 2: 
-        return(0x7D0204080FA042850A140810E24487020448912240810E1428701F40810203E)
-            tempvar syscall_ptr : felt* = syscall_ptr
-            tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
-            tempvar range_check_ptr = range_check_ptr
-            tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
-
+    if type.low == 2: 
+               
+        return (Uint256(0x20448912240810E1428701F40810203E, 0x7D0204080FA042850A140810E244870))
     end 
         
-    if type == 3:
-        return(0xC993264C9932E6CD9B365C793264C98F1E4C993263C793264C98F264CB97264)
-            tempvar syscall_ptr : felt* = syscall_ptr
-            tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
-            tempvar range_check_ptr = range_check_ptr
-            tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
+    if type.low == 3:
+        return (Uint256(0xF1E4C993263C793264C98F264CB97264, 0xC993264C9932E6CD9B365C793264C98))
     end 
 
-    if type == 4: 
-        return(0x6CE1B3670E9C3C8101E38750224480E9D4189120BA70F20C178E1B3874E9C36)
-            tempvar syscall_ptr : felt* = syscall_ptr
-            tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
-            tempvar range_check_ptr = range_check_ptr
-            tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
-
+    if type.low == 4: 
+        return (Uint256(0x9D4189120BA70F20C178E1B3874E9C36,0x6CE1B3670E9C3C8101E38750224480E))
     end 
 
-    if type == 5:
-        return(0xB00B20B30B30B20B00B20B40B40B40B40B20B30B40B50B50B40B3)
-            tempvar syscall_ptr : felt* = syscall_ptr
-            tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
-            tempvar range_check_ptr = range_check_ptr
-            tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
-
+    if type.low == 5:
+        return (Uint256(0xB40B40B40B40B20B30B40B50B50B40B3,0xB00B20B30B30B20B00B20))
     end
     
-    let res = 0xF9AF98F96F96F98F9AF9AF98F96F96F98F9AF9CF9AF98F98F9AF9B
+    let res = Uint256(0x98F96F96F98F9AF9CF9AF98F98F9AF9B, 0xF9AF98F96F96F98F9AF9AF)
     return(res)
 end
 
@@ -437,16 +431,16 @@ func getPstTwo{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr
 
     alloc_locals
 
-    let bool = (type-5)*(type-6)
+    let bool = (type.low-5)*(type.low-6)
 
     with_attr error_message("PstTwo value only applies to Queens or Kings"):
         assert bool = 0
     end
 
-    if type == 5:
+    if type.low == 5:
         return (0xB30B50B50B50B40B30B20B40B50B40B40B20B00B20B30B30B20B0)
     end
-    if type == 6:
+    if type.low == 6:
         return(0xF9EF9CF9CF9CF9CF9EFA1FA1FA0FA0FA1FA1FA4FA6FA2FA2FA6FA4)
     end
 end

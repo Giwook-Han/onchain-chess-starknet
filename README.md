@@ -55,6 +55,7 @@ Greatly enhanced computation efficiency via bitpacking and bitwise operations.
 - The top/bottom rows and left/right columns are treated as sentinel rows/columns for efficient
 boundary validation. Namely, (07, ..., 00), (63, ..., 07), and (56, ..., 00) never contain pieces.
 
+
     | 63 | 62 | 61 | 60 | 59 | 58 | 57 | 56 |
     | 55 | 54 | 53 | 52 | 51 | 50 | 49 | 48 |
     | 47 | 46 | 45 | 44 | 43 | 42 | 41 | 40 |
@@ -63,6 +64,8 @@ boundary validation. Namely, (07, ..., 00), (63, ..., 07), and (56, ..., 00) nev
     | 23 | 22 | 21 | 20 | 19 | 18 | 17 | 16 |
     | 15 | 14 | 13 | 12 | 11 | 10 | 09 | 08 |
     | 07 | 06 | 05 | 04 | 03 | 02 | 01 | 00 |
+
+    
 
 ### A quick example
                         Black

@@ -55,8 +55,8 @@ play (0 means black's turn; 1 means white's turn). e.g. a potential starting pos
     The first bit denotes the color: 0 means black; 1 means white).
     The last 3 bits denote the type:
 
-            | Bits | #     | Type   |
-            | ---- | ----- | ------ |
+            | Bits | # | Type   |
+            | ---- | - | ------ |
             | 000  | 0 | Empty  |
             | 001  | 1 | Pawn   |
             | 010  | 2 | Bishop |

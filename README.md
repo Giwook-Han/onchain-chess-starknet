@@ -25,28 +25,24 @@ A fully on-chain player-vs-AI chess game built on StarkNet
 - The game automatically terminates when checkmate is found by an engine. 
 
 ## A Gas-optimized Game
-| Creatively used bitpacking 
+Greatly enhanced computation efficiency via bitpacking and bitwise operations.
 
 ### chess board representation
-- The chess board is bitpacked into an Uint256 value. 
+- The board is an 8x8 representation of a 6x6 chess board. For efficiency, all information is
+bitpacked into a single uint256, and board positions are accessed via bit shifts and bit masks.
+- Since each piece is 4 bits, there are 64 `indices` to access, and a total numnber of 256 bits are used. 
+- For example, the piece at index 14 is accessed with ``(board >> (14 << 2)) & 'OxF'.
 
-The board is an 8x8 representation of a 6x6 chess board. For efficiency, all information is
-bitpacked into a single uint256. Thus, unlike typical implementations, board positions are
-accessed via bit shifts and bit masks, as opposed to array accesses. Since each piece is 4 bits,
-there are 64 ``indices'' to access:
-                                    | | | | | | | | |
-                                    |-|-|-|-|-|-|-|-|
-                                    |63|62|61|60|59|58|57|56
-                                    |55|54|53|52|51|50|49|48
-                                    47 46 45 44 43 42 41 40
-                                    39 38 37 36 35 34 33 32
-                                    31 30 29 28 27 26 25 24
-                                    23 22 21 20 19 18 17 16
-                                    15 14 13 12 11 10 09 08
-                                    07 06 05 04 03 02 01 00
-All numbers in the figure above are in decimal representation.
-For example, the piece at index 2 is accessed with ``(board >> (27 << 2)) & 'OxF'.
-///
+    | 63 | 62 | 61 | 60 | 59 | 58 | 57 | 56 |
+    |----|----|----|----|----|----|----|----|
+    | 55 | 54 | 53 | 52 | 51 | 50 | 49 | 48 |
+    | 47 | 46 | 45 | 44 | 43 | 42 | 41 | 40 |
+    | 39 | 38 | 37 | 36 | 35 | 34 | 33 | 32 |
+    | 31 | 30 | 29 | 28 | 27 | 26 | 25 | 24 |
+    | 23 | 22 | 21 | 20 | 19 | 18 | 17 | 16 |
+    | 15 | 14 | 13 | 12 | 11 | 10 | 09 | 08 |
+    | 07 | 06 | 05 | 04 | 03 | 02 | 01 | 00 |
+    
 The top/bottom rows and left/right columns are treated as sentinel rows/columns for efficient
 boundary validation (see {Chess-generateMoves} and {Chess-isValid}). i.e., (63, ..., 56),
 (07, ..., 00), (63, ..., 07), and (56, ..., 00) never contain pieces. Every bit in those rows
@@ -57,6 +53,7 @@ play (0 means black's turn; 1 means white's turn). e.g. a potential starting pos
 - Each chess piece is defined with 4 bits as follows:
     The first bit denotes the color: 0 means black; 1 means white).
     The last 3 bits denote the type:
+
             | Bits | # | Type   |
             | ---- | - | ------ |
             | 000  | 0 | Empty  |

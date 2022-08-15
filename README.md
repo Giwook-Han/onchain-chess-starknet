@@ -31,8 +31,11 @@ Greatly enhanced computation efficiency via bitpacking and bitwise operations.
 - The board is an 8x8 representation of a 6x6 chess board. For efficiency, all information is
 bitpacked into a single uint256, and board positions are accessed via bit shifts and bit masks.
 - Since each piece is 4 bits, there are 64 `indices` to access, and a total numnber of 256 bits are used. 
-- For example, the piece at index 14 is accessed with ``(board >> (14 << 2)) & 'OxF'.
+- For example, the piece at index 14 is accessed with `(board >> (14 << 2)) & 'OxF'`.
+- The top/bottom rows and left/right columns are treated as sentinel rows/columns for efficient
+boundary validation
 
+>
     | 63 | 62 | 61 | 60 | 59 | 58 | 57 | 56 |
     |----|----|----|----|----|----|----|----|
     | 55 | 54 | 53 | 52 | 51 | 50 | 49 | 48 |
@@ -42,10 +45,8 @@ bitpacked into a single uint256, and board positions are accessed via bit shifts
     | 23 | 22 | 21 | 20 | 19 | 18 | 17 | 16 |
     | 15 | 14 | 13 | 12 | 11 | 10 | 09 | 08 |
     | 07 | 06 | 05 | 04 | 03 | 02 | 01 | 00 |
-    
-The top/bottom rows and left/right columns are treated as sentinel rows/columns for efficient
-boundary validation (see {Chess-generateMoves} and {Chess-isValid}). i.e., (63, ..., 56),
-(07, ..., 00), (63, ..., 07), and (56, ..., 00) never contain pieces. Every bit in those rows
+
+ (07, ..., 00), (63, ..., 07), and (56, ..., 00) never contain pieces. Every bit in those rows
 and columns should be ignored, except for the last bit. The last bit denotes whose turn it is to
 play (0 means black's turn; 1 means white's turn). e.g. a potential starting position:
 
@@ -75,4 +76,4 @@ play (0 means black's turn; 1 means white's turn). e.g. a potential starting pos
 - The game rules are defined in chess_board.cairo. 
 - The AI decision-making machine is defined in ai_player.cairo
 
-> made with soul at StarkNet House Hackathon, 08.16.2022
+::made with soul at StarkNet House Hackathon, 08.16.2022::

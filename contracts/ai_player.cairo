@@ -22,6 +22,10 @@ from starkware.cairo.common.uint256 import (
 )
 from contracts.chess_board import board, movesArray, getPiece, getMovesArray, isLegalMove, rotate, applyMove, generateMove, appendMoves, checkKnightNKingsMove, checkSlidingPiecesMove
 
+#
+# const val
+#
+
 const TRUE = 1
 const FALSE = 0
 
@@ -33,32 +37,9 @@ const KNIGHT = 4
 const QUEEN = 5
 const KING = 6
 
-# AI player functions
-@external
-func aiApplyMove{
-    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
-}(board : Uint256, depth : Uint256) -> (boardAfterPlay : Uint256, isOver : felt):
-    alloc_locals
-    # searchMove returns bestMove
-    # if bestMove is 0, then no move is available
-    # else apply Best Move.
-    # let board_status : Uint256 = board
-    let (bestMove, isOver) = searchMove(board, depth)
-
-    # if AI can't move anywhere, then the game is over
-    if isOver == TRUE:
-        return (board, isOver)
-    end
-
-    # get first 6bits from the bestMove (111111000000 = 0xFC0)
-    let (fromIndex : Uint256) = uint256_and(bestMove, Uint256(0xFC0, 0))
-    # get last 6bits from the bestMove
-    let (toIndex : Uint256) = uint256_and(bestMove, Uint256(0x3F, 0))
-
-    let (boardAfterPlay : Uint256) = applyMove_forAI(fromIndex, toIndex, board)
-
-    return (boardAfterPlay, FALSE)
-end
+#
+# inner func
+#
 
 # apply Move but don't trigger the state change.
 func applyMove_forAI{
@@ -608,4 +589,35 @@ func simGetPiece{
     let (piece_color : Uint256, piece_type : Uint256) = uint256_signed_div_rem(piece, Uint256(8, 0))
     # all this three instance is smaller than 2**128
     return (piece.low, piece_type.low, piece_color.low)
+end
+
+#
+# external func
+#
+
+# AI player functions
+@external
+func aiApplyMove{
+    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+}(board : Uint256, depth : Uint256) -> (boardAfterPlay : Uint256, isOver : felt):
+    alloc_locals
+    # searchMove returns bestMove
+    # if bestMove is 0, then no move is available
+    # else apply Best Move.
+    # let board_status : Uint256 = board
+    let (bestMove, isOver) = searchMove(board, depth)
+
+    # if AI can't move anywhere, then the game is over
+    if isOver == TRUE:
+        return (board, isOver)
+    end
+
+    # get first 6bits from the bestMove (111111000000 = 0xFC0)
+    let (fromIndex : Uint256) = uint256_and(bestMove, Uint256(0xFC0, 0))
+    # get last 6bits from the bestMove
+    let (toIndex : Uint256) = uint256_and(bestMove, Uint256(0x3F, 0))
+
+    let (boardAfterPlay : Uint256) = applyMove_forAI(fromIndex, toIndex, board)
+
+    return (boardAfterPlay, FALSE)
 end

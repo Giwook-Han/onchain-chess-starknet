@@ -3,9 +3,9 @@
 A fully on-chain player-vs-AI chess game built on StarkNet
 
 ## play the game 
-go to website: 
-View chess board contract: 
-View AI player contract: 
+- go to website: 
+- View chess board contract: 
+- View AI player contract: 
 
 ## Game Rules
 
@@ -34,6 +34,8 @@ The board is an 8x8 representation of a 6x6 chess board. For efficiency, all inf
 bitpacked into a single uint256. Thus, unlike typical implementations, board positions are
 accessed via bit shifts and bit masks, as opposed to array accesses. Since each piece is 4 bits,
 there are 64 ``indices'' to access:
+                                    | | | | | | | | |
+                                    |-|-|-|-|-|-|-|-|
                                     |63|62|61|60|59|58|57|56
                                     |55|54|53|52|51|50|49|48
                                     47 46 45 44 43 42 41 40

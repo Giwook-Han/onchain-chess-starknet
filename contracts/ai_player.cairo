@@ -29,30 +29,27 @@ const FALSE = 0
 # AI player functions
 @external
 func aiApplyMove{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr,bitwise_ptr : BitwiseBuiltin*
-}(depth : Uint256) -> (bool : felt):
+}(depth : Uint256) -> (canMove : felt):
 
     alloc_locals
     # searchMove returns bestMove 
     # if bestMove is 0, then no move is available
     # else apply Best Move.
-    # let (board_status : Uint256) = board.read()
-    # let (bestMove, bool) = searchMove(board_status, depth)
+    let (board_status : Uint256) = board.read()
+    let (bestMove, canMove) = searchMove(board_status, depth)
 
-    # # with_attr error_message("game is over, checkmate!"):
-    # #     assert bool = TRUE 
-    # # end
-    # tempvar syscall_ptr : felt* = syscall_ptr
-    # tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
-    # tempvar range_check_ptr = range_check_ptr
-            
-    # let (temp1 : Uint256) = uint256_shr(bestMove,Uint256(6,0))
-    # let (fromIndex : Uint256) = uint256_and(temp1,Uint256(0x3F,0))
-    # let (toIndex : Uint256) = uint256_and(bestMove,Uint256(0x3F,0))
+    # if AI can't move anywhere, then the game is over
+    if canMove == FALSE:
+        return (canMove)
+    end
+    
+    let (temp1 : Uint256) = uint256_shr(bestMove,Uint256(6,0))
+    let (fromIndex : Uint256) = uint256_and(temp1,Uint256(0x3F,0))
+    let (toIndex : Uint256) = uint256_and(bestMove,Uint256(0x3F,0))
 
-    # applyMove(fromIndex, toIndex)
+    applyMove(fromIndex, toIndex)
 
-    return(0)
-
+    return(TRUE)
 end
 
 func searchMove{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr,bitwise_ptr : BitwiseBuiltin*
@@ -437,12 +434,15 @@ func getPstTwo{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr
         assert bool = 0
     end
 
-    if type.low == 5:
-        return (0xB30B50B50B50B40B30B20B40B50B40B40B20B00B20B30B30B20B0)
+    if type.low == 5: 
+        return (Uint256(0xB40B50B40B40B20B00B20B30B30B20B0,0xB30B50B50B50B40B30B20))
     end
     if type.low == 6:
-        return(0xF9EF9CF9CF9CF9CF9EFA1FA1FA0FA0FA1FA1FA4FA6FA2FA2FA6FA4)
+        return (Uint256(0xA1FA0FA0FA1FA1FA4FA6FA2FA2FA6FA4,0xF9EF9CF9CF9CF9CF9EFA1F))
     end
+
+    # should be repair (there was no return thing)
+    return (Uint256(0,0))
 end
 
 func simApplyMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
@@ -451,14 +451,14 @@ func simApplyMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_
     # input argument board is not necessary bcz we will gonna use storage_val
     alloc_locals
 
-    let toIndex = uint256_and(Move, Uint256(0x3F,0))
-    let temp = uint256_shr(Move, Uint256(6,0))
-    let fromIndex = uint256_and(temp, Uint256(0x3F,0))
+    let (toIndex) = uint256_and(Move, Uint256(0x3F,0))
+    let (temp) = uint256_shr(Move, Uint256(6,0))
+    let (fromIndex) = uint256_and(temp, Uint256(0x3F,0))
 
     let curr_board = sim_board
     # get the piece at the from index
     let (piece_num_felt,_,_) = simGetPiece(curr_board, fromIndex)
-    let (piece) = Uint256(piece_num_felt,0)
+    let piece : Uint256 = Uint256(piece_num_felt,0)
 
     # Replace 4 bits at the from index with 0000
     # _board &= type(uint256).max ^ (0xF << ((_move >> 6) << 2));

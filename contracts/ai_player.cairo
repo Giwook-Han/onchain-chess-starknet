@@ -10,6 +10,7 @@ from starkware.cairo.common.uint256 import (
     uint256_or,
     uint256_xor,
     uint256_shl,
+    uint256_not,
     uint256_shr,
     uint256_and,
     uint256_le,
@@ -19,38 +20,182 @@ from starkware.cairo.common.uint256 import (
     uint256_signed_div_rem,
     Uint256,
 )
+from contracts.chess_board import board, movesArray, rotate, generateMove, appendMoves, checkKnightNKingsMove, checkSlidingPiecesMove
 
 const TRUE = 1
 const FALSE = 0
 
 # AI player functions
 
+func searchMove{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr,bitwise_ptr : BitwiseBuiltin*
+}(board : Uint256, depth : Uint256) -> (bestMove : Uint256, bool : felt):
+    # github copilot please stop
+    # initialized values? @Yetta board and movesArray
+    let (movesArray) = generateMove(board)
+    if movesArray.low == 0:
+        return (Uint256(0,0), FALSE)
+    end
+    let (bestScore,bestMove) = rec1(board,0)
+    if is_le(bestScore, -1261)==TRUE:
+        return (Uint256(0,0), FALSE)
+    end
+    return (bestMove, TRUE)
+end
+
+func rec1{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr,bitwise_ptr : BitwiseBuiltin*
+}(board : Uint256, index : Uint256) -> (realBest : felt, realBestMove : Uint256):
+    alloc_locals
+    # check index's storage_val is empty
+    # and if it is, return bestScore
+    let (aMovesArray : Uint256) = movesArray.read(index)
+    if aMovesArray.low == 0:
+        return (-4196, Uint256(0,0))
+    end
+
+    let (score, move) = rec1(board, index+1)
+    let (aaa, bbb) = rec2(board, aMovesArray)
+
+    if is_le(score,aaa-1) == TRUE:
+        return (aaa, bbb)
+    else:
+        return (score, move)
+    end
+end
+
+func rec2{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr,bitwise_ptr : BitwiseBuiltin*
+}(board : Uint256, aMovesArray : Uint256) -> (bestScore : felt, bestMove : Uint256):
+    alloc_locals
+
+    let (aMovesArray_shifted) = uint256_shr(aMovesArray,Uint256(12,0))
+
+    # check index's_storage_val & 0xFFF is empty
+    # and if it is, return -4_196
+    let (lastMove) = uint256_and(aMovesArray,Uint256(0xFFF,0))
+    if lastMove == 0:
+        return (-4196, Uint256(0,0))
+    end
+
+    #check score of index's_storage_val & 0x3F
+    #and compare with currentScore and return bigger one
+    let (bestScore, bestMove) = rec2(board, aMovesArray_shifted)
+
+    let (currMove) = uint256_and(aMovesArray,Uint256(0xFFF,0))
+
+    let (temp1 : Uint256) = uint256_shr(lastMove,Uint256(6,0))
+    let (fromIndex : Uint256) = uint256_and(temp1,Uint256(0x3F,0))
+    let (toIndex : Uint256) = uint256_and(lastMove,Uint256(0x3F,0))
+    let (currScore_eval : felt) = evaluateMove(board, fromIndex, toIndex)
+    let (sim_board : Uint256) = simApplyMove(currMove,board)
+
+    let (currScore : felt) = currScore_eval + negaMax(sim_board, depth - 1)
+
+    if is_le(bestScore,currScore) == TRUE:
+        return (currScore, currMove)
+    else:
+        return (bestScore, bestMove)
+    end
+end
+
+
 # @Yetta: need to define play depth
 func negaMax{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr,bitwise_ptr : BitwiseBuiltin*
-    }(depth : Uint256) -> (res : felt):
-
-    let (moves) = generateMoves()
+}(sim_board : Uint256, depth : Uint256) -> (res : felt):
+    alloc_locals
     if depth ==0:
         return (0)
     end
-    if moves == 0:
+    if movesArray(0) == 0:
         return (0)
-    end 
+    end
 
-    let bestScore = -4196
-    local currentScore
-    local bestMove
+    # the best score in all possible moves stored in MovesArray
+    let (bestScore : felt, bestMove : Uint256) = realBest(simBoard,0)
 
-    
+    # ((_board >> ((bestMove & 0x3F) << 2)) & 7)
+    let (temp1) = uint256_and(bestMove, Uint256(0x3F))
+    let (temp2) = uint256_shl(temp1, Uint256(2,0))
+    let (toIndex_shifted) = uint256_shr(sim_board, temp2)
+    let (temp4) = uint256_and(toIndex_shifted, Uint256(7,0))
+    # if the king is captured
+    if temp4 == 6:
+        return (-4000)
+    end
 
-    return (res)
+    # _board & 1
+    let temp5 = uint256_and(sim_board, Uint256(1,0))
+    # bestScore + negaMax(_board.applyMove(bestMove), _depth - 1)
+    let depth_1 = uint256_sub(depth, Uint256(1,0))
+
+    let sim_board_1 = simApplyMove(bestMove,sim_board)
+    let res1 = bestScore + negaMax(sim_board_1, depth_1)
+    let res2 = negaMax(sim_board_1, depth_1) - bestScore
+
+    # if _board & 1 == 0, meaning the player is black
+    if temp5 == 0:
+        return (res1)
+    else:
+        return (res2)
+    end
+end
+
+# find the best move in all arrays of moves
+func realBest{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr,bitwise_ptr : BitwiseBuiltin*
+}(board : Uint256, index : Uint256) -> (realBest : felt, realBestMove : Uint256):
+    alloc_locals
+    # check index's storage_val is empty
+    # and if it is, return bestScore
+    let (aMovesArray : Uint256) = movesArray.read(index)
+    if aMovesArray.low == 0:
+        return (-4196, Uint256(0,0))
+    end
+
+    let (score, move) = realBest(board, index+1)
+    let (aaa, bbb) = findBestLocal(board, aMovesArray)
+
+    if is_le(score,aaa-1) == TRUE:
+        return (aaa, bbb)
+    else:
+        return (score, move)
+    end
+end
+
+# find the best move in a given array of moves
+func findBestLocal{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr,bitwise_ptr : BitwiseBuiltin*
+}(board : Uint256, aMovesArray : Uint256) -> (bestScore : felt, bestMove : Uint256):
+    alloc_locals
+
+    let (aMovesArray_shifted) = uint256_shr(aMovesArray,Uint256(12,0))
+
+    # check index's_storage_val & 0xFFF is empty
+    # and if it is, return -4_196
+    let (lastMove) = uint256_and(aMovesArray,Uint256(0xFFF,0))
+    if lastMove == 0:
+        return (-4196, Uint256(0,0))
+    end
+
+    #check score of index's_storage_val & 0x3F
+    #and compare with currentScore and return bigger one
+    let (bestScore, bestMove) = findBestLocal(board, aMovesArray_shifted)
+
+    let (currMove) = uint256_and(aMovesArray,Uint256(0xFFF,0))
+
+    let (temp1 : Uint256) = uint256_shr(lastMove,Uint256(6,0))
+    let (fromIndex : Uint256) = uint256_and(temp1,Uint256(0x3F,0))
+    let (toIndex : Uint256) = uint256_and(lastMove,Uint256(0x3F,0))
+    let (currScore : felt) = evaluateMove(board, fromIndex, toIndex)
+
+    if is_le(bestScore,currScore) == TRUE:
+        return (currScore, currMove)
+    else:
+        return (bestScore, bestMove)
+    end
 end
 
 func evaluateMove{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr,bitwise_ptr : BitwiseBuiltin*
-    }(fromIndex : Uint256, toIndex : Uint256) -> (name : felt):
+}(board : Uint256,fromIndex : Uint256, toIndex : Uint256) -> (res : felt):
     alloc_locals
-    let (piece_num_from, piece_color_from, piece_type_from) = getPiece(fromIndex)
-    let (piece_num_to, piece_color_to, piece_type_to) = getPiece(toIndex)
+    let (piece_num_from, piece_color_from, piece_type_from) = simGetPiece(board, fromIndex)
+    let (piece_num_to, piece_color_to, piece_type_to) = simGetPiece(board,toIndex)
     local captureValue
     local newPst
     local oldPst
@@ -73,9 +218,9 @@ func evaluateMove{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_p
     let c2 = uint256_and(c2_uint, Uint256(0xFFF,0))
 
     # (getPstTwo(pieceAtToIndex) >> (0xC * (0x23 - toIndex))) & 0xFFF
-    let (temp3 : felt) = 0xC * (0x23 - toIndex.low)
-    let temp3uint = Uint256(temp3,0)
-    let c3_uint = uint256_shr(pst_value_to_2, temp3uint)
+    let (toIndex_shifted : felt) = 0xC * (0x23 - toIndex.low)
+    let toIndex_shifteduint = Uint256(toIndex_shifted,0)
+    let c3_uint = uint256_shr(pst_value_to_2, toIndex_shifteduint)
     let c3 = uint256_and(c3_uint, Uint256(0xFFF,0))
 
     # calculate capture value. 
@@ -154,8 +299,9 @@ func evaluateMove{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_p
 end
 
 func getPst{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr,bitwise_ptr : BitwiseBuiltin*
-    }(type : Uint256) -> (res : Uint256):
+}(type : Uint256) -> (res : Uint256):
 
+    alloc_locals
     if type == 1: 
         return(0x2850A142850F1E3C78F1E2858C182C50A943468A152A788103C54A142850A14)
     end 
@@ -174,16 +320,20 @@ func getPst{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr,bi
 
     if type == 5:
         return(0xB00B20B30B30B20B00B20B40B40B40B40B20B30B40B50B50B40B3)
+    end
     
-    local res = (0xF9AF98F96F96F98F9AF9AF98F96F96F98F9AF9CF9AF98F98F9AF9B)
+    let res = 0xF9AF98F96F96F98F9AF9AF98F96F96F98F9AF9CF9AF98F98F9AF9B
     return(res)
 end
 
 func getPstTwo{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr,bitwise_ptr : BitwiseBuiltin*
-    }(type : Uint256) -> (res : Uint256):
+}(type : Uint256) -> (res : Uint256):
+
     alloc_locals
+
     let bool = (type-5)*(type-6)
-    with_attr error_message("Only eligible for Queens or Kings"):
+
+    with_attr error_message("PstTwo value only applies to Queens or Kings"):
         assert bool = 0
     end
 
@@ -195,11 +345,64 @@ func getPstTwo{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr
     end
 end
 
-func simpApplyMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
-}(fromIndex : Uint256, toIndex : Uint256) -> (bool : felt):
-    # apply the move to the board
+func simApplyMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+}(Move : Uint256, sim_board : Uint256) -> (sim_board : Uint256):
+    # apply the move to a given board
     # input argument board is not necessary bcz we will gonna use storage_val
     alloc_locals
 
-    return(TRUE)
+    let toIndex = uint256_and(Move, Uint256(0x3F,0))
+    let temp = uint256_shr(Move, Uint256(6,0))
+    let fromIndex = uint256_and(temp, Uint256(0x3F,0))
+
+    let curr_board = sim_board
+    # get the piece at the from index
+    let (piece_num_felt,_,_) = simGetPiece(curr_board, fromIndex)
+    let (piece) = Uint256(piece_num_felt,0)
+
+    # Replace 4 bits at the from index with 0000
+    # _board &= type(uint256).max ^ (0xF << ((_move >> 6) << 2));
+    # fromIndexshifted = ((_move >> 6) << 2)
+    let (fromIndex_shifted) = uint256_shl(fromIndex, Uint256(2,0))
+    # (0xF << fromIndexshifted)
+    let (temp1) = uint256_shl(Uint256(0xF,0), fromIndex_shifted)
+    let largest_uint = Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+    let (temp2) = uint256_xor(largest_uint, temp1)
+    let (from_0000) = uint256_and(curr_board, temp2)
+
+    # Replace 4 bits at the to index with 0000
+    # _board &= type(uint256).max ^ (0xF << (toIndex << 2));
+    let (toIndex_shifted) = uint256_shl(toIndex, Uint256(2,0))
+    let (temp4) = uint256_shl(Uint256(0xF,0), toIndex_shifted)
+    let (temp5) = uint256_xor(largest_uint, temp4)
+    let (to_0000 : Uint256) = uint256_and(from_0000, temp5)
+
+    # Place the piece at the to index
+    # _board |= (piece << (toIndex << 2))
+    let (to_piece) = uint256_shl(piece, toIndex_shifted)
+    # mask the move with the piece
+    let (board_after_move : Uint256) = uint256_or(to_0000, to_piece)
+    # rotate the board
+    let (board_after_rotate : Uint256) = rotate(board_after_move)
+
+    return(board_after_rotate)
+
+end
+
+func simGetPiece{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+}(board : Uint256, index : Uint256) -> (piece_num : felt, piece_type : felt, piece_color : felt):
+    alloc_locals
+
+    with_attr error_message("index should be less than 63"):
+        let (IsIndexBiggerThan63) = uint256_le(index, Uint256(63, 0))
+        assert IsIndexBiggerThan63 = TRUE
+    end
+    # do '(board >> (index << 2)) & 0xF'
+    let (getIndex : Uint256) = uint256_shr(board, Uint256(index.low * 4, 0))
+    let (piece : Uint256) = uint256_and(getIndex, Uint256(15, 0))
+    # get color and type of the piece; first bit represents color; the next 3 bits represent type
+    let (piece_color : Uint256, piece_type : Uint256) = uint256_signed_div_rem(piece, Uint256(8, 0))
+    # all this three instance is smaller than 2**128
+    return (piece.low, piece_color.low, piece_type.low)
+
 end

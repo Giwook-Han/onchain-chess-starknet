@@ -1,10 +1,46 @@
-#will leave comment later..
+# this project starts from 5/9's onChain chess on eth 
+# LINK: https://github.com/fiveoutofnine/fiveoutofnine-chess
+
+# the main thing is, we can represent a chess board with only one Uint256 val
+
+# Uint256 has 256 bits, so high 128 bits will gonna upside of the board,
+# and low 128 bits will gonna lowside of the board
+
+#  Each chess piece is defined with 4 bits as follows:
+#      * The first bit denotes the color (0 means black; 1 means white).
+#      * The last 3 bits denote the type:
+#          | Bits | # | Type   |
+#          | ---- | - | ------ |
+#          | 000  | 0 | Empty  |
+#          | 001  | 1 | Pawn   |
+#          | 010  | 2 | Bishop |
+#          | 011  | 3 | Rook   |
+#          | 100  | 4 | Knight |
+#          | 101  | 5 | Queen  |
+#          | 110  | 6 | King   |
+
+# so each sequare is 4 bits
+# so the initial status of the boad will look like this
+
+    # 1 0000 0000 0000 0000 0000 0000 0000 0000
+    # 2 0000 0011 0010 0101 0110 0100 0011 0000
+    # 3 0000 0001 0001 0001 0001 0001 0001 0000
+    # 4 0000 0000 0000 0000 0000 0000 0000 0000
+    # 5 0000 0000 0000 0000 0000 0000 0000 0000
+    # 6 0000 1001 1001 1001 1001 1001 1001 0000
+    # 7 0000 1011 1010 1101 1110 1100 1011 0000
+    # 8 0000 0000 0000 0000 0000 0000 0000 0001
+
+# it will be super efficient
+# that's why we start make this program
+
+# but, A lot of optimization is needed 
 
 %lang starknet
 
 from starkware.cairo.common.alloc import alloc
 from starkware.cairo.common.math import unsigned_div_rem, assert_not_zero
-from starkware.cairo.common.math_cmp import is_le, is_in_range
+from starkware.cairo.common.math_cmp import is_le, is_in_range, is_nn
 from starkware.cairo.common.bitwise import bitwise_xor
 from starkware.cairo.common.cairo_builtins import HashBuiltin, BitwiseBuiltin
 from starkware.cairo.common.find_element import search_sorted
@@ -17,7 +53,6 @@ from starkware.cairo.common.uint256 import (
     uint256_le,
     uint256_lt,
     uint256_add,
-    uint256_mul,
     uint256_sub,
     uint256_signed_div_rem,
     Uint256,
@@ -25,13 +60,17 @@ from starkware.cairo.common.uint256 import (
 
 from contracts.IAi import IAi
 
-#bool
+#
+# const val
+#
+
+# bool
 const TRUE = 1
 const FALSE = 0
 const initial_board = 331318787292356502577094498346479229205088297258959912939892506624
 # hex: 3256430011111100000000000000000099999900BADECB000000000
 
-#pieces in chess
+# pieces in chess
 const PWAN = 1
 const BISHOP = 2
 const ROOK = 3
@@ -39,89 +78,91 @@ const KNIGHT = 4
 const QUEEN = 5
 const KING = 6
 
+#
+# storage_val
+#
 
-# how to assign the board an initial value?
+# movesArray's index is starts from 0
+# let's store next empty index of the movesArray in index 0's first 4 bits
+@storage_var
+func movesArray(index : felt) -> (moves : Uint256):
+end
+
 @storage_var
 func board() -> (board : Uint256):
+end
+
+@storage_var
+func testBoardRotate() -> (board : Uint256):
 end
 
 @storage_var
 func aiContractAddress() -> (address : felt):
 end
 
-@external
-func setAiAddress{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr
-}(address : felt):
-    aiContractAddress.write(address)
-    return()
-end
-
-# func getAdjustedIndex(index : Uint256) -> (adjusted_index : Uint256):
-#     let (adjusted_index : Uint256) = index.low
-#     return(adjusted_index)
-# end
-
-#movesArray's index is starts from 0
-#let's store next empty index of the movesArray in index 0's first 4 bits
-# @Yetta: needs to discuss how movesArray can be used in other AI functions. 
-@storage_var
-func movesArray(index : felt) -> (moves : Uint256):
-end
+#
+# @view
+#
 
 @view
-func getMovesArray{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr
-}(index : felt) -> (move : Uint256):
-    let (res) = movesArray.read(index)
+func getTestBoardRotate{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}() -> (
+    board : Uint256
+):
+    let (res) = testBoardRotate.read()
     return (res)
 end
 
-# clear MovesArray
-func clearMovesArray{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr
-}(index : felt):
-
-    if index == 0:
-        movesArray.write(0,Uint256(0,0))
-        return ()
-    end
-
-    clearMovesArray(index - 1)
-    movesArray.write(index,Uint256(0,0))
-    return ()
-    
+@view
+func getBoardStatus{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}() -> (
+    res : Uint256
+):
+    let (res) = board.read()
+    return (res)
 end
 
-
-# func append(movesArray:felt*) -> ():
-# end
-
-# ========================================
+@view
+func getMovesArray{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
+    index : felt
+) -> (move : Uint256):
+    let (res) = movesArray.read(index)
+    return (res)
+end
 
 # get the piece of the index
 @view
 func getPiece{
     syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
 }(index : Uint256) -> (piece_num : felt, piece_type : felt, piece_color : felt):
-    
     alloc_locals
     let (getIndex) = getIndexAdjustedBoard(index)
     let (piece : Uint256) = uint256_and(getIndex, Uint256(15, 0))
     # get color and type of the piece; first bit represents color; the next 3 bits represent type
     let (piece_color : Uint256, piece_type : Uint256) = uint256_signed_div_rem(piece, Uint256(8, 0))
     # all this three instance is smaller than 2**128
-    return (piece.low, piece_color.low, piece_type.low)
+    return (piece.low, piece_type.low, piece_color.low)
 end
 
-#getIndexAdjustedBoard
+#
+# inner func
+#
+
+# getIndexAdjustedBoard
 # this function gets the adjusted board sequence
-# where the requested index is in the first 4 digits. 
-func getIndexAdjustedBoard{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+# where the requested index is in the first 4 digits.
+func getIndexAdjustedBoard{
+    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
 }(index : Uint256) -> (indexAdjustedBoard : Uint256):
     alloc_locals
 
-    with_attr error_message("index should be less than 63"):
-        let (IsIndexBiggerThan63) = uint256_le(index, Uint256(63, 0))
-        assert IsIndexBiggerThan63 = TRUE
+    # with_attr error_message("index should be less than 63"):
+    #     let (IsIndexBiggerThan63) = uint256_le(index, Uint256(63, 0))
+    #     assert IsIndexBiggerThan63 = TRUE
+    # end
+    let (IsIndexBiggerThan63) = uint256_le(index, Uint256(63, 0))
+    if IsIndexBiggerThan63 == TRUE:
+        return (Uint256(0,0))
     end
+    
     # do '(board >> (index << 2)) & 0xF'
     # get current board state
     let (boardStatus : Uint256) = board.read()
@@ -141,20 +182,22 @@ func rotate{range_check_ptr, bitwise_ptr : BitwiseBuiltin*}(board : Uint256) -> 
     end
 
     # shift the board 4 times to right
-    let (rightShiftedBoard  : Uint256) = uint256_shr(board, Uint256(4, 0))
+    let (rightShiftedBoard : Uint256) = uint256_shr(board, Uint256(4, 0))
     # then use recursion with shifted board
     let (rotateBoard : Uint256) = rotate(rightShiftedBoard)
     # do the 'rotateBoard >> board & 0xF'
     let (getPiece : Uint256) = uint256_and(board, Uint256(15, 0))
-    let (mid : Uint256) = uint256_shr(rotateBoard, Uint256(4,0)) # rotateBoard >> 4, right shift 4 bits
-    let (result : Uint256) = uint256_or(mid, getPiece)
+    let (mid : Uint256) = uint256_shr(rotateBoard, Uint256(4, 0))  # rotateBoard >> 4, right shift 4 bits
+    let (makeGetPiece2RightIndex : Uint256) = uint256_shl(getPiece, Uint256(252, 0))
+    let (result : Uint256) = uint256_or(mid, makeGetPiece2RightIndex)
     return (result)
 end
 
 # returns if there is a clear path
 # along a direction vector from one index to another
 # every Argument is smaller than 2**128
-func searchRay{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+func searchRay{
+    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
 }(fromIndex : Uint256, toIndex : Uint256, directionVector : felt) -> (bool : felt):
     alloc_locals
 
@@ -182,45 +225,49 @@ func searchRay{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr
     end
 
     let (bool) = checkPathUsingRecursion(rayStart, rayEnd, directionVector)
-    let (isValidPosition : felt) = isValid(Uint256(rayEnd,0))
-    let res = bool * isValidPosition 
+    let (isValidPosition : felt) = isValid(Uint256(rayEnd, 0))
+    let res = bool * isValidPosition
     return (res)
 end
 
 # direction vector shows the direction a piece can go to
-func checkPathUsingRecursion{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+func checkPathUsingRecursion{
+    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
 }(rayStart : felt, rayEnd : felt, directionVector : felt) -> (bool : felt):
     alloc_locals
 
-    let (done) = is_le(rayStart+1,rayEnd) 
+    let (done) = is_le(rayStart + 1, rayEnd)
     if done == FALSE:
         return (TRUE)
     end
+    if rayStart == 63:
+            return (TRUE)
+    end
 
     let (bool) = checkPathUsingRecursion(rayStart + directionVector, rayEnd, directionVector)
-    
-    #check isValidMove
-    let (isValidPosition : felt) = isValid(Uint256(rayStart,0))
-    #check is there any pieces in the way
-    let (adjusted_board : Uint256) = getIndexAdjustedBoard(Uint256(rayStart,0))
+
+    # check isValidMove
+    let (isValidPosition : felt) = isValid(Uint256(rayStart, 0))
+    # check is there any pieces in the way
+    let (adjusted_board : Uint256) = getIndexAdjustedBoard(Uint256(rayStart, 0))
     let (isCapturePiece : felt) = isCapture(adjusted_board)
     let (flipCapture : felt) = bitwise_xor(isCapturePiece, 1)
-    let res_mid = isValidPosition*flipCapture
-    let res = res_mid*bool
+    let res_mid = isValidPosition * flipCapture
+    let res = res_mid * bool
     return (res)
-
 end
 
 # generate every possible move
 # let indexOfSquare start from 36 (6*6)
 # let index : Uint256 = Uint256(0x238A179D71B69959551349138D30B289,0xDB5D33CB1BADB2BAA99A59)
 # use single Uint256 and if it is full stor, clear it and start fill it again
-func generateMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+func generateMove{
+    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
 }(indexOfSquare : felt, index : Uint256) -> (movesSoFar : Uint256):
     alloc_locals
 
     if indexOfSquare == 0:
-        return (Uint256(0,0))
+        return (Uint256(0, 0))
     end
 
     local isFinal
@@ -230,47 +277,51 @@ func generateMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_
         assert isFinal = FALSE
     end
 
-    #do index >>= 6
-    let (newIndex : Uint256) = uint256_shr(index,Uint256(6,0))
+    # do index >>= 6
+    let (newIndex : Uint256) = uint256_shr(index, Uint256(6, 0))
 
-    let (movesSoFar : Uint256) = generateMove(indexOfSquare -1, newIndex)
- 
+    let (movesSoFar : Uint256) = generateMove(indexOfSquare - 1, newIndex)
+
     # get 6bits
-    let (pieceIndex : Uint256) = uint256_and(newIndex,Uint256(63,0))
+    let (pieceIndex : Uint256) = uint256_and(index, Uint256(63, 0))
     # get piece of it
-    let (_,pieceType,pieceColor) = getPiece(pieceIndex)
+    let (_, pieceType, pieceColor) = getPiece(pieceIndex)
     # get adjustedBoard
     let (adjustedBoard : Uint256) = getIndexAdjustedBoard(pieceIndex)
 
-    let (nowTurn : Uint256) = uint256_and(newIndex,Uint256(1,0))
+    let (getTurn : Uint256) = board.read()
+    let (nowTurn : Uint256) = uint256_and(getTurn, Uint256(1, 0))
 
-    #need to make this clean ;(
+    # need to make this clean ;(
     # if the piece is not there, return
     # or if the piece color is not mach with trun, return
     if pieceType == 0:
         return (movesSoFar)
     end
-    if pieceColor - nowTurn.low != 0:
+
+    if pieceColor != nowTurn.low:
         return (movesSoFar)
     end
 
     # if piece is pwan
-    # the tricky part of this is PWAN may can go all of 4 direction(Ldiagnal and Rdiagnal and forward and two steps forward) 
+    # the tricky part of this is PWAN may can go all of 4 direction(Ldiagnal and Rdiagnal and forward and two steps forward)
     # or can go one of that direction or none of that direction.
     # need to check that using if statment, and should make sure that single Uint256 variable has that information
     if pieceType == PWAN:
         # check Diagnal ##################################################################################
 
         # check diagnal sqr has enemy pieces
-        let (getLeftDiagnalIndex : Uint256) = uint256_and(index,Uint256(28,0)) # 28 = 7 * 4
+        let (getLeftDiagnalIndex : Uint256) = uint256_and(index, Uint256(28, 0))  # 28 = 7 * 4
         let (canCaptureLeft) = isCapture(getLeftDiagnalIndex)
 
         # and if it is, add a path
-        #PWAN's legal move
+        # PWAN's legal move
         local afterCheckLeft : Uint256
         if canCaptureLeft == TRUE:
-            let (allocValue : Uint256) = appendMoves(movesSoFar,pieceIndex,Uint256(pieceIndex.low+8,0),isFinal)
-            assert (afterCheckLeft) = allocValue
+            let (allocValue : Uint256) = appendMoves(
+                movesSoFar, pieceIndex, Uint256(pieceIndex.low + 8, 0), isFinal
+            )
+            assert afterCheckLeft = allocValue
 
             # avoid revoked refer
             tempvar syscall_ptr : felt* = syscall_ptr
@@ -288,14 +339,16 @@ func generateMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_
         end
 
         # check diagnal sqr has enemy pieces
-        let (getRightDiagnalIndex : Uint256) = uint256_and(index,Uint256(36,0)) # 36 = 9 * 4
+        let (getRightDiagnalIndex : Uint256) = uint256_and(index, Uint256(36, 0))  # 36 = 9 * 4
         let (canCaptureRight) = isCapture(getRightDiagnalIndex)
 
         # and if it is, add a path
-        #PWAN's legal move
+        # PWAN's legal move
         local afterCheckRight : Uint256
         if canCaptureRight == TRUE:
-            let (allocValue : Uint256) = appendMoves(afterCheckLeft,pieceIndex,Uint256(pieceIndex.low+8,0),isFinal)
+            let (allocValue : Uint256) = appendMoves(
+                afterCheckLeft, pieceIndex, Uint256(pieceIndex.low + 8, 0), isFinal
+            )
             assert afterCheckRight = allocValue
 
             # avoid revoked refer
@@ -322,25 +375,32 @@ func generateMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_
         # Check Front Also ###############################################################################
 
         # check front sqr is empty
-        let (getFrontSquare : Uint256) = uint256_shr(adjustedBoard,Uint256(32,0)) # 32 = 8 * 4
-        let (checkEmpty : Uint256) = uint256_and(getFrontSquare,Uint256(15,0))
+        let (getFrontSquare : Uint256) = uint256_shr(adjustedBoard, Uint256(32, 0))  # 32 = 8 * 4
+
+        let (checkEmpty : Uint256) = uint256_and(getFrontSquare, Uint256(15, 0))
 
         # if front is empty, you should check this is the first time to move this pwan
         # and if is the first time, check one more step forward and if there is empty, then this pwan can move 2 steps forward
         if checkEmpty.low == 0:
             # append this move and get move
-            let (afterCheckFront : Uint256) = appendMoves(afterCheckRight,pieceIndex,Uint256(pieceIndex.low+8,0),isFinal)
+            let (afterCheckFront : Uint256) = appendMoves(
+                afterCheckRight, pieceIndex, Uint256(pieceIndex.low + 8, 0), isFinal
+            )
 
             # check this is first move Pwan's Starting Line is 16 to 23 and this value(16 to 23) >> 2 is 2
-            let (isItFirstMove : Uint256) = uint256_shr(pieceIndex,Uint256(3,0))
+            let (isItFirstMove : Uint256) = uint256_shr(pieceIndex, Uint256(3, 0))
             # check 2 steps forward sqr is empty
-            let (get2StepsForwardSquare : Uint256) = uint256_shr(adjustedBoard,Uint256(64,0)) # 64 = 16 * 4
-            let (check2StepsForwardIsEmpty : Uint256) = uint256_and(get2StepsForwardSquare,Uint256(15,0))
+            let (get2StepsForwardSquare : Uint256) = uint256_shr(adjustedBoard, Uint256(64, 0))  # 64 = 16 * 4
+            let (check2StepsForwardIsEmpty : Uint256) = uint256_and(
+                get2StepsForwardSquare, Uint256(15, 0)
+            )
             # isItFirstMove == 2 & check2StepsForwardIsEmpty == 0
             if (isItFirstMove.low - 2) + check2StepsForwardIsEmpty.low == 0:
                 # let a = (movesSoFar << 12) | fromIndex << 6 | toIndex
-                let (res : Uint256) = appendMoves(afterCheckFront,pieceIndex,Uint256(pieceIndex.low+8,0),isFinal)
-                
+                let (res : Uint256) = appendMoves(
+                    afterCheckFront, pieceIndex, Uint256(pieceIndex.low + 8, 0), isFinal
+                )
+
                 # avoid revoked refer
                 tempvar syscall_ptr : felt* = syscall_ptr
                 tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
@@ -363,13 +423,12 @@ func generateMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_
             tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
             tempvar range_check_ptr = range_check_ptr
             tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
-            
+
             return (afterCheckRight)
         end
-
     else:
         # if piece is knight or king
-        if (pieceType - KNIGHT)*(pieceType - KING) == 0:
+        if (pieceType - KNIGHT) * (pieceType - KING) == 0:
             # Piece is a knight or a king.
             # Knights and kings always only have 8 positions to check relative to their
             # current position, and the relative distances are always the same. For
@@ -379,10 +438,12 @@ func generateMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_
             local directions : Uint256
 
             if pieceType == KNIGHT:
-                assert directions = Uint256(0x060A0F11,0)
-                let (mid,_) = checkKnightNKingsMove(pieceIndex,directions,movesSoFar,'ADD',FALSE)
-                let (res,_) = checkKnightNKingsMove(pieceIndex,directions,mid,'SUB',isFinal)
-                
+                assert directions = Uint256(0x060A0F11, 0)
+                let (mid, _) = checkKnightNKingsMove(
+                    pieceIndex, directions, movesSoFar, 'ADD', FALSE
+                )
+                let (res, _) = checkKnightNKingsMove(pieceIndex, directions, mid, 'SUB', isFinal)
+
                 # avoid revoked refer
                 tempvar syscall_ptr : felt* = syscall_ptr
                 tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
@@ -392,71 +453,101 @@ func generateMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_
                 # finish to find every possible wa
                 return (res)
             else:
-                assert directions = Uint256(0x060A0F11,0)
-                let (mid,_) = checkKnightNKingsMove(pieceIndex,directions,movesSoFar,'ADD',FALSE)
-                let (res,_) = checkKnightNKingsMove(pieceIndex,directions,mid,'SUB',isFinal)
+                assert directions = Uint256(0x060A0F11, 0)
+                let (mid, _) = checkKnightNKingsMove(
+                    pieceIndex, directions, movesSoFar, 'ADD', FALSE
+                )
+                let (res, _) = checkKnightNKingsMove(pieceIndex, directions, mid, 'SUB', isFinal)
 
                 return (res)
             end
 
-
-        # other all sliding pieces
+            # other all sliding pieces
         else:
             if pieceType == ROOK:
-            
                 # Check straight moves
                 # each index has 4 bits so do *4 every direction
 
-                #check right straight moves
-                let (checkRightWay : Uint256) = checkSlidingPiecesMove(pieceIndex,1*4,movesSoFar,FALSE)
-                #check left straight moves
-                let (checkLeftWay : Uint256) = checkSlidingPiecesMove(pieceIndex,-1*4,checkRightWay,FALSE)                
-                #check upper straight moves
-                let (checkUpperWay : Uint256) = checkSlidingPiecesMove(pieceIndex,8*4,checkLeftWay,FALSE)                
-                #check lower straight moves
-                let (checkRightWay : Uint256) = checkSlidingPiecesMove(pieceIndex,-8*4,checkUpperWay,isFinal)
+                # check right straight moves
+                let (checkRightWay : Uint256) = checkSlidingPiecesMove(
+                    pieceIndex, 1 * 4, movesSoFar, FALSE
+                )
+                # check left straight moves
+                let (checkLeftWay : Uint256) = checkSlidingPiecesMove(
+                    pieceIndex, (-1) * 4, checkRightWay, FALSE
+                )
+                # check upper straight moves
+                let (checkUpperWay : Uint256) = checkSlidingPiecesMove(
+                    pieceIndex, 8 * 4, checkLeftWay, FALSE
+                )
+                # check lower straight moves
+                let (checkRightWay : Uint256) = checkSlidingPiecesMove(
+                    pieceIndex, (-8) * 4, checkUpperWay, isFinal
+                )
 
                 return (checkRightWay)
             end
 
             if pieceType == BISHOP:
-            
                 # Check diagnal moves
                 # each index has 4 bits so do *4 every direction
 
-                #check upper right straight moves
-                let (checkUpperRightWay : Uint256) = checkSlidingPiecesMove(pieceIndex,9*4,movesSoFar,FALSE)
-                #check upper left straight moves
-                let (checkUpperLeftWay : Uint256) = checkSlidingPiecesMove(pieceIndex,7*4,checkUpperRightWay,FALSE)                
-                #check lower right straight moves
-                let (checkLowerRightWay : Uint256) = checkSlidingPiecesMove(pieceIndex,-9*4,checkUpperLeftWay,FALSE)                
-                #check lower left straight moves
-                let (checkLowerLeftWay : Uint256) = checkSlidingPiecesMove(pieceIndex,-7*4,checkLowerRightWay,isFinal)
+                # check upper right straight moves
+                let (checkUpperRightWay : Uint256) = checkSlidingPiecesMove(
+                    pieceIndex, 9 * 4, movesSoFar, FALSE
+                )
+                # check upper left straight moves
+                let (checkUpperLeftWay : Uint256) = checkSlidingPiecesMove(
+                    pieceIndex, 7 * 4, checkUpperRightWay, FALSE
+                )
+                # check lower right straight moves
+                let (checkLowerRightWay : Uint256) = checkSlidingPiecesMove(
+                    pieceIndex, (-9) * 4, checkUpperLeftWay, FALSE
+                )
+                # check lower left straight moves
+                let (checkLowerLeftWay : Uint256) = checkSlidingPiecesMove(
+                    pieceIndex, (-7) * 4, checkLowerRightWay, isFinal
+                )
 
                 return (checkLowerLeftWay)
             end
 
             if pieceType == QUEEN:
-            
                 # Check diagnal + straight moves
                 # each index has 4 bits so do *4 every direction
 
-                #check right straight moves
-                let (checkRightWay : Uint256) = checkSlidingPiecesMove(pieceIndex,1*4,movesSoFar,FALSE)
-                #check left straight moves
-                let (checkLeftWay : Uint256) = checkSlidingPiecesMove(pieceIndex,-1*4,checkRightWay,FALSE)                
-                #check upper straight moves
-                let (checkUpperWay : Uint256) = checkSlidingPiecesMove(pieceIndex,8*4,checkLeftWay,FALSE)                
-                #check lower straight moves
-                let (checkLowerWay : Uint256) = checkSlidingPiecesMove(pieceIndex,-8*4,checkUpperWay,isFinal)
-                #check upper right straight moves
-                let (checkUpperRightWay : Uint256) = checkSlidingPiecesMove(pieceIndex,9*4,checkLowerWay,FALSE)
-                #check upper left straight moves
-                let (checkUpperLeftWay : Uint256) = checkSlidingPiecesMove(pieceIndex,7*4,checkUpperRightWay,FALSE)                
-                #check lower right straight moves
-                let (checkLowerRightWay : Uint256) = checkSlidingPiecesMove(pieceIndex,-9*4,checkUpperLeftWay,FALSE)                
-                #check lower left straight moves
-                let (checkLowerLeftWay : Uint256) = checkSlidingPiecesMove(pieceIndex,-7*4,checkLowerRightWay,isFinal)
+                # check right straight moves
+                let (checkRightWay : Uint256) = checkSlidingPiecesMove(
+                    pieceIndex, 1 * 4, movesSoFar, FALSE
+                )
+                # check left straight moves
+                let (checkLeftWay : Uint256) = checkSlidingPiecesMove(
+                    pieceIndex, (-1) * 4, checkRightWay, FALSE
+                )
+                # check upper straight moves
+                let (checkUpperWay : Uint256) = checkSlidingPiecesMove(
+                    pieceIndex, 8 * 4, checkLeftWay, FALSE
+                )
+                # check lower straight moves
+                let (checkLowerWay : Uint256) = checkSlidingPiecesMove(
+                    pieceIndex, (-8) * 4, checkUpperWay, isFinal
+                )
+                # check upper right straight moves
+                let (checkUpperRightWay : Uint256) = checkSlidingPiecesMove(
+                    pieceIndex, 9 * 4, checkLowerWay, FALSE
+                )
+                # check upper left straight moves
+                let (checkUpperLeftWay : Uint256) = checkSlidingPiecesMove(
+                    pieceIndex, 7 * 4, checkUpperRightWay, FALSE
+                )
+                # check lower right straight moves
+                let (checkLowerRightWay : Uint256) = checkSlidingPiecesMove(
+                    pieceIndex, (-9) * 4, checkUpperLeftWay, FALSE
+                )
+                # check lower left straight moves
+                let (checkLowerLeftWay : Uint256) = checkSlidingPiecesMove(
+                    pieceIndex, (-7) * 4, checkLowerRightWay, isFinal
+                )
 
                 return (checkLowerLeftWay)
             end
@@ -467,23 +558,30 @@ func generateMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_
             tempvar range_check_ptr = range_check_ptr
             tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
         end
-        
-            #if this code is exequte, that mean this function has an error lol
-            with_attr error_message("Check generateMove function"):
-                assert 1 = 0
-            end
-        return (Uint256(0,0))
-    end
 
+        # if this code is exequte, that mean this function has an error lol
+        with_attr error_message("Check generateMove function"):
+            assert 1 = 0
+        end
+        return (Uint256(0, 0))
+    end
 end
 
 # check pieces valid moves
-func checkKnightNKingsMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*}(pieceIndex : Uint256, directions : Uint256, movesSoFar : Uint256, addOrSub : felt ,isFinal : felt) -> (newMoveInfo : Uint256, lastVaildMove : Uint256):
+func checkKnightNKingsMove{
+    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+}(
+    pieceIndex : Uint256,
+    directions : Uint256,
+    movesSoFar : Uint256,
+    addOrSub : felt,
+    isFinal : felt,
+) -> (newMoveInfo : Uint256, lastVaildMove : Uint256):
     alloc_locals
-    #check direction is empty
+    # check direction is empty
     if directions.low == 0:
-        return (movesSoFar,Uint256(0,0))
-    end 
+        return (movesSoFar, Uint256(0, 0))
+    end
     # check is this last time to call appendMoves function and is this the last recursion
     local isItFinal
     if isFinal == TRUE:
@@ -493,28 +591,30 @@ func checkKnightNKingsMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, ran
     end
 
     # direction >> 8
-    let (newDirections : Uint256) = uint256_shr(directions,Uint256(8,0))
+    let (newDirections : Uint256) = uint256_shr(directions, Uint256(8, 0))
     # call recursively
-    let (newMoves : Uint256, lastMove : Uint256) = checkKnightNKingsMove(pieceIndex, newDirections, movesSoFar, addOrSub, FALSE)
+    let (newMoves : Uint256, lastMove : Uint256) = checkKnightNKingsMove(
+        pieceIndex, newDirections, movesSoFar, addOrSub, FALSE
+    )
 
     # get 8 bits from directions, which is single direction
-    let (direction : Uint256) = uint256_and(directions,Uint256(0xFF,0))
+    let (direction : Uint256) = uint256_and(directions, Uint256(0xFF, 0))
     # and add to pieceIndex so that can get a destination's index
     local destination : Uint256
     if addOrSub == 'ADD':
-        let (getDestination : Uint256,_) = uint256_add(pieceIndex,direction)
+        let (getDestination : Uint256, _) = uint256_add(pieceIndex, direction)
         assert destination = getDestination
     else:
-        let (getDestination : Uint256,_) = uint256_add(pieceIndex,direction)
+        let (getDestination : Uint256, _) = uint256_add(pieceIndex, direction)
         assert destination = getDestination
     end
 
     local afterCheckLastMove : Uint256
     local afterCheckValid : Uint256
-    
+
     let (checkValid : felt) = isValid(destination)
     if checkValid == TRUE:
-        let (allocMoves : Uint256) = appendMoves(newMoves,pieceIndex,destination,isItFinal)
+        let (allocMoves : Uint256) = appendMoves(newMoves, pieceIndex, destination, isItFinal)
         assert afterCheckValid = allocMoves
         # store last move
         assert afterCheckLastMove = destination
@@ -529,99 +629,140 @@ func checkKnightNKingsMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, ran
         # point last move
         assert afterCheckLastMove = lastMove
 
-
         # if this is last chance to call appendMoves function BUT if not a Valid move
         # then store last vaild move to storage_val
         if isItFinal == 1:
             # remove last stored move (6 bits fromIndex, 6 bits toIndex 12bits total)
-            let (toStoreMoves : Uint256) = uint256_shr(afterCheckValid,Uint256(12,0))
-            let (res : Uint256) = appendMoves(newMoves,pieceIndex,lastMove,isItFinal)
-            
+            let (toStoreMoves : Uint256) = uint256_shr(afterCheckValid, Uint256(12, 0))
+            let (res : Uint256) = appendMoves(newMoves, pieceIndex, lastMove, isItFinal)
+
             # avoid revoked refer
             tempvar syscall_ptr : felt* = syscall_ptr
             tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
             tempvar range_check_ptr = range_check_ptr
             tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
         else:
-
             # avoid revoked refer
             tempvar syscall_ptr : felt* = syscall_ptr
             tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
             tempvar range_check_ptr = range_check_ptr
             tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
         end
-
     end
 
-    return (afterCheckValid,afterCheckLastMove)
+    return (afterCheckValid, afterCheckLastMove)
 end
 
 # check sliding pieces avaliable move
-func checkSlidingPiecesMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*}(pieceIndex : Uint256, direction : felt, movesSoFar : Uint256,isFinal : felt) -> (newMoveInfo : Uint256):
+func checkSlidingPiecesMove{
+    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+}(pieceIndex : Uint256, direction : felt, movesSoFar : Uint256, isFinal : felt) -> (
+    newMoveInfo : Uint256
+):
     alloc_locals
-
     local isItFinal
     if isFinal == TRUE:
         assert isItFinal = TRUE
     else:
         assert isItFinal = FALSE
     end
-    
-    let (checkIsVaild) = isValid(Uint256(pieceIndex.low + direction,0))
-    # if it is not valid move, return it
+
+    let (checkIsNotNegative : felt) = is_nn(pieceIndex.low + direction)
+    # if this is last chance to call appendMoves function BUT if not a Valid move
+    if (checkIsNotNegative * isItFinal) + isItFinal == 1:
+        # remove last stored move (6 bits fromIndex, 6 bits toIndex 12bits total)
+        let (toStoreMoves : Uint256) = uint256_shr(movesSoFar, Uint256(12, 0))
+        # get the last toIndex
+        let (lastMove : Uint256) = uint256_and(movesSoFar, Uint256(0x3F, 0))
+        # store it
+        let (res : Uint256) = appendMoves(toStoreMoves, pieceIndex, lastMove, isItFinal)
+
+        return (movesSoFar)
+    end
+
+    if checkIsNotNegative == FALSE:
+        return (movesSoFar)
+    end
+
+    # check is valid
+    let (checkIsVaild) = isValid(Uint256(pieceIndex.low + direction, 0))
+    # if this is last chance to call appendMoves function BUT if not a Valid move
+    if (checkIsVaild * isItFinal) + isItFinal == 1:
+        # remove last stored move (6 bits fromIndex, 6 bits toIndex 12bits total)
+        let (toStoreMoves : Uint256) = uint256_shr(movesSoFar, Uint256(12, 0))
+        # get the last toIndex
+        let (lastMove : Uint256) = uint256_and(movesSoFar, Uint256(0x3F, 0))
+        # store it
+        let (res : Uint256) = appendMoves(toStoreMoves, pieceIndex, lastMove, isItFinal)
+
+        return (movesSoFar)
+    end
+
+    # check is valid
     if checkIsVaild == FALSE:
         return (movesSoFar)
     end
 
-    let (checkIsCapture) = isCapture(Uint256(pieceIndex.low + direction,0))
+    let (checkIsCapture) = isCapture(Uint256(pieceIndex.low + direction, 0))
     # if it is capture move, store Data and return it
     if checkIsCapture == TRUE:
-        let (res : Uint256) = appendMoves(movesSoFar, pieceIndex, Uint256(pieceIndex.low + direction,0),isItFinal)
+        let (res : Uint256) = appendMoves(
+            movesSoFar, pieceIndex, Uint256(pieceIndex.low + direction, 0), isItFinal
+        )
         return (res)
     end
 
     # if it is valid and also not capture any pieces, check next direction.
-    let (newMoveInfo : Uint256) = checkSlidingPiecesMove(Uint256(pieceIndex.low + direction,0),direction + direction,movesSoFar,FALSE)
+    let (newMoveInfo : Uint256) = checkSlidingPiecesMove(
+        Uint256(pieceIndex.low + direction, 0), direction + direction, movesSoFar, FALSE
+    )
 
     # and also append this move
-    let (result : Uint256) = appendMoves(movesSoFar, pieceIndex, Uint256(pieceIndex.low + direction,0),isItFinal)
+    let (result : Uint256) = appendMoves(
+        movesSoFar, pieceIndex, Uint256(pieceIndex.low + direction, 0), isItFinal
+    )
 
     return (result)
-
 end
-
 
 # apped moves to storage_val if movesArray is full or the final appends
 # moveInfo is single Uint256 that moves is stored
-func appendMoves{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*}(moveInfo : Uint256, fromIndex : Uint256, toIndex : Uint256, is_final : felt) -> (newMoveInfo : Uint256):
+func appendMoves{
+    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+}(moveInfo : Uint256, fromIndex : Uint256, toIndex : Uint256, is_final : felt) -> (
+    newMoveInfo : Uint256
+):
     alloc_locals
 
-    let (checkIsFull : Uint256) = uint256_shr(moveInfo,Uint256(246,0))
+    let (checkIsFull : Uint256) = uint256_shr(moveInfo, Uint256(246, 0))
+    let (_, isItFull : Uint256) = uint256_signed_div_rem(checkIsFull, Uint256(64, 0))
     # if checkIsFull.low != 0 then moveInfo is full and if it's full we need to store that value
-    if checkIsFull.low != 0:
+    if isItFull.low != 0:
         # let's store last index of the movesArray in index 0's first 4 bits
         let (getIndexArray : Uint256) = movesArray.read(0)
-        # do (getIndexArray >> 252) & 0xF this give me to the last index of the 
-        let (getIndex : Uint256) = uint256_shr(getIndexArray,Uint256(252,0))
-        let (index : Uint256) = uint256_and(getIndex,Uint256(15,0))
+        # do (getIndexArray >> 252) & 0xF this give me to the last index of the
+        let (getIndex : Uint256) = uint256_shr(getIndexArray, Uint256(252, 0))
+        let (index : Uint256) = uint256_and(getIndex, Uint256(15, 0))
 
         # write it to the storage
-        movesArray.write(index.low,moveInfo)
+        movesArray.write(index.low, moveInfo)
 
         # make index + 1 and store to the index 0's first 4 bits
-        let (newIndex : Uint256) = uint256_shl(Uint256(index.low+1,0),Uint256(252,0)) #is this should be 251? 
-        #make Uint256 that only first 4 bits are 0 and the other are 1
-        let toEraseIndex : Uint256 = Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,0x0FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+        let (newIndex : Uint256) = uint256_shl(Uint256(index.low + 1, 0), Uint256(252, 0))  # is this should be 251?
+        # make Uint256 that only first 4 bits are 0 and the other are 1
+        let toEraseIndex : Uint256 = Uint256(
+            0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF, 0x0FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+        )
         # do (getIndexArray & toEraseIndex) | newIndex
-        let (erasedIndex : Uint256) = uint256_and(getIndexArray,toEraseIndex)
-        let (completeUint : Uint256) = uint256_or(erasedIndex,newIndex)
+        let (erasedIndex : Uint256) = uint256_and(getIndexArray, toEraseIndex)
+        let (completeUint : Uint256) = uint256_or(erasedIndex, newIndex)
         # write a new index
-        movesArray.write(0,completeUint)
+        movesArray.write(0, completeUint)
 
         # make new moveInfo Instance
-        let makeNewMoveInfo : Uint256 = Uint256(fromIndex.low,0)
-        let (newMoveInfo : Uint256) = uint256_shl(makeNewMoveInfo, Uint256(6,0))
-        let (res : Uint256) = uint256_or(newMoveInfo,Uint256(toIndex.low,0))
+        let makeNewMoveInfo : Uint256 = Uint256(fromIndex.low, 0)
+        let (newMoveInfo : Uint256) = uint256_shl(makeNewMoveInfo, Uint256(6, 0))
+        let (res : Uint256) = uint256_or(newMoveInfo, Uint256(toIndex.low, 0))
 
         # avoid revoked refer
         tempvar syscall_ptr : felt* = syscall_ptr
@@ -630,46 +771,54 @@ func appendMoves{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_p
         tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
 
         return (res)
-    # if not, it means that moveInfo is not full so you can insert moves
+        # if not, it means that moveInfo is not full so you can insert moves
     else:
         # moveInfo << 12
-        let (shl2MoveInfo : Uint256) = uint256_shl(moveInfo,Uint256(12,0))
+        let (shl2MoveInfo : Uint256) = uint256_shl(moveInfo, Uint256(12, 0))
         # make move ((fromIndex << 6) | toIndex)
-        let (shl2FromIndex : Uint256) = uint256_shl(fromIndex,Uint256(6,0))
-        let (move : Uint256) = uint256_or(shl2FromIndex,toIndex)
+        let (shl2FromIndex : Uint256) = uint256_shl(fromIndex, Uint256(6, 0))
+        let (move : Uint256) = uint256_or(shl2FromIndex, toIndex)
 
-        let (res : Uint256) = uint256_or(shl2MoveInfo,move)
+        let (res : Uint256) = uint256_or(shl2MoveInfo, move)
 
         # indexOfSquare's max value is 36 (board is 6*6)
         # so if indexOfSquare value is 36, this is the last time to call this function
         # so need to store value to the storage_val
-        if is_final == TRUE: 
+        if is_final == TRUE:
             # let's store last index of the movesArray in index 0's first 4 bits
             let (getIndexArray : Uint256) = movesArray.read(0)
-            # do (getIndexArray >> 252) & 0xF this give me to the last index of the 
-            let (getIndex : Uint256) = uint256_shr(getIndexArray,Uint256(252,0))
-            let (index : Uint256) = uint256_and(getIndex,Uint256(15,0))
+            # do (getIndexArray >> 252) & 0xF this give me to the last index of the
+            let (getIndex : Uint256) = uint256_shr(getIndexArray, Uint256(252, 0))
+            let (index : Uint256) = uint256_and(getIndex, Uint256(15, 0))
 
             # write it to the storage
-            movesArray.write(index.low,moveInfo)
-
-            # make index + 1 and store to the index 0's first 4 bits
-            let (newIndex : Uint256) = uint256_shl(Uint256(index.low+1,0),Uint256(252,0)) #is this should be 251? 
-            #make Uint256 that only first 4 bits are 0 and the other are 1
-            let toEraseIndex : Uint256 = Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,0x0FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
-            # do (getIndexArray & toEraseIndex) | newIndex
-            let (erasedIndex : Uint256) = uint256_and(getIndexArray,toEraseIndex)
-            let (completeUint : Uint256) = uint256_or(erasedIndex,newIndex)
-            # write a new index
-            movesArray.write(0,completeUint)
+            movesArray.write(index.low - 1, moveInfo)
 
             # avoid revoked refer
             tempvar syscall_ptr : felt* = syscall_ptr
             tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
             tempvar range_check_ptr = range_check_ptr
             tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
-
         else:
+            # # let's store last index of the movesArray in index 0's first 4 bits
+            # let (getIndexArray : Uint256) = movesArray.read(0)
+            # # do (getIndexArray >> 252) & 0xF this give me to the last index of the
+            # let (getIndex : Uint256) = uint256_shr(getIndexArray,Uint256(252,0))
+            # let (index : Uint256) = uint256_and(getIndex,Uint256(15,0))
+
+            # # write it to the storage
+            # movesArray.write(index.low,moveInfo)
+
+            # # make index + 1 and store to the index 0's first 4 bits
+            # let (newIndex : Uint256) = uint256_shl(Uint256(index.low+1,0),Uint256(252,0)) #is this should be 251?
+            # #make Uint256 that only first 4 bits are 0 and the other are 1
+            # let toEraseIndex : Uint256 = Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,0x0FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+            # # do (getIndexArray & toEraseIndex) | newIndex
+            # let (erasedIndex : Uint256) = uint256_and(getIndexArray,toEraseIndex)
+            # let (completeUint : Uint256) = uint256_or(erasedIndex,newIndex)
+            # # write a new index
+            # movesArray.write(0,completeUint)
+
             # avoid revoked refer
             tempvar syscall_ptr : felt* = syscall_ptr
             tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
@@ -682,14 +831,28 @@ func appendMoves{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_p
         tempvar pedersen_ptr : HashBuiltin* = pedersen_ptr
         tempvar range_check_ptr = range_check_ptr
         tempvar bitwise_ptr : BitwiseBuiltin* = bitwise_ptr
-        
+
         return (res)
     end
 end
 
+# clear MovesArray
+func clearMovesArray{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
+    index : felt
+):
+    if index == 0:
+        movesArray.write(0, Uint256(0, 0))
+        return ()
+    end
 
-func isLegalMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
-    }(fromIndex : Uint256, toIndex : Uint256) -> (bool : felt):
+    clearMovesArray(index - 1)
+    movesArray.write(index, Uint256(0, 0))
+    return ()
+end
+
+func isLegalMove{
+    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+}(fromIndex : Uint256, toIndex : Uint256) -> (bool : felt):
     alloc_locals
 
     # check for out of bound issues
@@ -713,7 +876,7 @@ func isLegalMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_p
         assert piece_color = player_color
     end
 
-    #let (piece_num2, piece_color2, piece_type2) = getPiece(toIndex)
+    # let (piece_num2, piece_color2, piece_type2) = getPiece(toIndex)
 
     let toIndexfelt = toIndex.low
     let fromIndexfelt = fromIndex.low
@@ -728,7 +891,7 @@ func isLegalMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_p
     let toIndex_1 = Uint256(toIndexFelt_1, 0)
     let (isValidMove_1) = isValid(toIndex_1)
 
-    #@Yetta: this seemed to work. 
+    # @Yetta: this seemed to work.
     if comparison == TRUE:
         assert indexChange = fromIndex.low - toIndex.low
     else:
@@ -737,154 +900,164 @@ func isLegalMove{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_p
 
     # piece type is 1 for pawn, 2 for rook, 3 for knight, 4 for bishop, 5 for queen, 6 for king
     # pawns
-    if piece_type == 1:
+    if piece_type == PWAN:
         with_attr error_message("Pawns Cannot Move Backwards"):
             assert comparison = FALSE
         end
         # if pawn goes diagnally, check if there is a piece in the way
-        let bool_7_9 = (indexChange-7)*(indexChange-9)
+        let bool_7_9 = (indexChange - 7) * (indexChange - 9)
 
         if bool_7_9 == 0:
             # assert isCapturePiece = isCapture(toIndex)
-            if isCapturePiece == FALSE: 
-                return(FALSE)
+            if isCapturePiece == FALSE:
+                return (FALSE)
             end
         end
 
-        # moves one step forward, check validity. 
+        # moves one step forward, check validity.
         if indexChange == 8:
             if isValidMove == FALSE:
-                return(FALSE)
+                return (FALSE)
+            else:
+                return (TRUE)
             end
-        end 
+        end
         # moves two step forward, check validity.
         if indexChange == 16:
             if isValidMove == FALSE:
-                return(FALSE)
+                return (FALSE)
             end
             if isValidMove_1 == FALSE:
-                return(FALSE)
+                return (FALSE)
+            else:
+                return (TRUE)
             end
+        else:
+            return (FALSE)
         end
     end
 
-    let indexChangeUint =  Uint256(indexChange,0)
-    # knight 
-    let possible_moves_knight = Uint256(0x28440,0)
+    let indexChangeUint = Uint256(indexChange, 0)
+    # knight
+    let possible_moves_knight = Uint256(0x28440, 0)
     let (shifted_knight : Uint256) = uint256_shr(possible_moves_knight, indexChangeUint)
-    let (resUint_knight : Uint256) = uint256_and(shifted_knight, Uint256(1,0))
+    let (resUint_knight : Uint256) = uint256_and(shifted_knight, Uint256(1, 0))
     let res_knight = resUint_knight.low
     if piece_type == 4:
         # let possible_moves = Uint256(0x28440,0)
         # move is not legal
         if res_knight == 0:
-            return(FALSE)
+            return (FALSE)
         end
         # check if move is valid
         if isValidMove == FALSE:
-            return(FALSE)
+            return (FALSE)
         end
-    end 
+    end
 
-    # king 
-    let possible_moves_king = Uint256(0x382,0)
+    # king
+    let possible_moves_king = Uint256(0x382, 0)
     let (shifted_king : Uint256) = uint256_shr(possible_moves_king, indexChangeUint)
-    let (resUint_king : Uint256) = uint256_and(shifted_king, Uint256(1,0))
+    let (resUint_king : Uint256) = uint256_and(shifted_king, Uint256(1, 0))
     let res_king = resUint_king.low
     if piece_type == 6:
         if res_king == 0:
-            return(FALSE)
+            return (FALSE)
         end
         # check if move is valid
         if isValidMove == FALSE:
-            return(FALSE)
+            return (FALSE)
         end
-    end 
+    end
 
     let (bool_lr : felt) = searchRay(fromIndex, toIndex, 1)
     let (bool_fb : felt) = searchRay(fromIndex, toIndex, 8)
-    let bool_horizontal = bool_lr*bool_fb
+    let bool_horizontal = bool_lr * bool_fb
 
     let (bool_diag_1 : felt) = searchRay(fromIndex, toIndex, 7)
     let (bool_diag_2 : felt) = searchRay(fromIndex, toIndex, 9)
-    let bool_diagonal = bool_diag_1*bool_diag_2
+    let bool_diagonal = bool_diag_1 * bool_diag_2
 
     let bool_queen = bool_horizontal + bool_diagonal
 
-    # rook 
+    # rook
     if piece_type == 2:
         if bool_horizontal == 0:
-            return(FALSE)
+            return (FALSE)
         end
-    end 
+    end
 
     # bishop
     if piece_type == 3:
         if bool_diagonal == 0:
-            return(FALSE)
+            return (FALSE)
         end
     end
 
     # queen
     if piece_type == 5:
         if bool_queen == 0:
-            return(FALSE)
+            return (FALSE)
         end
     end
 
     # use Engine's function to evaluate if the move results in winning or failing.
 
-    return(TRUE)
+    return (TRUE)
 end
 
-func checkInBound{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
-    }(index : Uint256) -> (bool : felt):
+func checkInBound{
+    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+}(index : Uint256) -> (bool : felt):
     alloc_locals
-    let map = Uint256(0x7E7E7E7E7E7E00,0)
+    let map = Uint256(0x7E7E7E7E7E7E00, 0)
     let (adjusted_board : Uint256) = uint256_shr(map, index)
-    let (uint_var) = uint256_and(adjusted_board, Uint256(1,0))
+    let (uint_var) = uint256_and(adjusted_board, Uint256(1, 0))
     let var = uint_var.low
     if var != 1:
-        return(FALSE)
+        return (FALSE)
     end
     return (TRUE)
 end
 
-func getPlayerColor{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
-}() -> (color:felt):
+func getPlayerColor{
+    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+}() -> (color : felt):
     alloc_locals
 
     let (board_status : Uint256) = board.read()
-    let(color_uint) = uint256_and(board_status,Uint256(1,0))
+    let (color_uint) = uint256_and(board_status, Uint256(1, 0))
     let color = color_uint.low
 
     return (color)
 end
 
-func isCapture{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+func isCapture{
+    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
 }(toIndex : Uint256) -> (bool : felt):
     # return true if the move is a capture
     # input argument board is not necessary bcz we will gonna use storage_val
-    # could be consider not get adjusted_board as an argument, and just get index and use getPiece function 
+    # could be consider not get adjusted_board as an argument, and just get index and use getPiece function
     alloc_locals
-    
+
     let (piece_num, piece_color, piece_type) = getPiece(toIndex)
 
     # check if empty
     if piece_num == 0:
-        return(FALSE)
+        return (FALSE)
     end
     # check if it's your own piece
     let (player_color) = getPlayerColor()
     if piece_color == player_color:
-        return(FALSE)
+        return (FALSE)
     end
 
-    return(TRUE)
-
+    return (TRUE)
 end
 
-func isValid{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*}(toIndex : Uint256) -> (bool : felt):
+func isValid{
+    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+}(toIndex : Uint256) -> (bool : felt):
     # return true if the move is valid
     # input argument board is not necessary bcz we will gonna use storage_val
     alloc_locals
@@ -892,44 +1065,47 @@ func isValid{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, 
     # if out of bound, return false
     # do (0x7E7E7E7E7E7E00 >> _toIndex) & 1, where the 0x string is the mapping of 0 << 63 | ... | 0 << 0
     let (var) = checkInBound(toIndex)
-    # valid positions are 1 
+    # valid positions are 1
     if var == FALSE:
-        return(FALSE)
-    end 
+        return (FALSE)
+    end
 
     # if the to index is occupied by a chess of the same color, return false
     let (piece_num, piece_color, piece_type) = getPiece(toIndex)
     let (player_color) = getPlayerColor()
     if piece_num + piece_color - player_color == piece_num:
-        return(FALSE)
+        return (FALSE)
     end
 
-    return(TRUE)
-
+    return (TRUE)
 end
 
+#
+# @constructor
+#
 
 @constructor
-func constructor{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+func constructor{
+    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
 }():
-    #1 0000 0000 0000 0000 0000 0000 0000 0000
-    #2 0000 0011 0010 0101 0110 0100 0011 0000
-    #3 0000 0001 0001 0001 0001 0001 0001 0000
-    #4 0000 0000 0000 0000 0000 0000 0000 0000
-    #5 0000 0000 0000 0000 0000 0000 0000 0000
-    #6 0000 1001 1001 1001 1001 1001 1001 0000
-    #7 0000 1011 1010 1101 1110 1100 1011 0000
-    #8 0000 0000 0000 0000 0000 0000 0000 0000
+    # 1 0000 0000 0000 0000 0000 0000 0000 0000
+    # 2 0000 0011 0010 0101 0110 0100 0011 0000
+    # 3 0000 0001 0001 0001 0001 0001 0001 0000
+    # 4 0000 0000 0000 0000 0000 0000 0000 0000
+    # 5 0000 0000 0000 0000 0000 0000 0000 0000
+    # 6 0000 1001 1001 1001 1001 1001 1001 0000
+    # 7 0000 1011 1010 1101 1110 1100 1011 0000
+    # 8 0000 0000 0000 0000 0000 0000 0000 0001
 
     # binary: 0000000000000000000000000000000000000011001001010110010000110000000000010001000100010001000100000000000000000000000000000000000000000000000000000000000000000000000010011001100110011001100100000000101110101101111011001011000000000000000000000000000000000000
-    # hex: 3256430011111100000000000000000099999900BADECB000000000
-    let initial : Uint256 = Uint256(0x00000000099999900BADECB000000000,0x32564300111111000000000)
+    # hex: 3256430011111100000000000000000099999900BADECB000000001
+    let initial : Uint256 = Uint256(0x00000000099999900BADECB000000001, 0x32564300111111000000000)
     board.write(initial)
 
-    return()
+    return ()
 end
 
-#                                Black
+# Black
 #                       00 00 00 00 00 00 00 00                    Black
 #                       00 00 02 05 06 02 03 00                 ♜ ♝ ♛ ♚ ♝ ♜
 #                       00 01 01 01 01 01 01 00                 ♟ ♟ ♟ ♟ ♟ ♟
@@ -940,25 +1116,18 @@ end
 #                       00 00 00 00 00 00 00 *01*                    White
 #                                White
 
-@view
-func getBoardStatus{
-    syscall_ptr : felt*,
-    pedersen_ptr : HashBuiltin*,
-    range_check_ptr
-    }() -> (res : Uint256):
-
-    let (res) = board.read()
-    return(res)
+@external
+func setAiAddress{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
+    address : felt
+):
+    aiContractAddress.write(address)
+    return ()
 end
 
-@external 
+@external
 func applyMove{
-    syscall_ptr : felt*,
-    pedersen_ptr : HashBuiltin*,
-    range_check_ptr,
-    bitwise_ptr : BitwiseBuiltin*
-    }(fromIndex : Uint256, toIndex : Uint256, depth : felt) -> (isItOver : felt):
-
+    syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
+}(fromIndex : Uint256, toIndex : Uint256, depth : felt) -> (isItOver : felt):
     alloc_locals
 
     # check AI player's contract address and if it is empty, return error
@@ -970,7 +1139,7 @@ func applyMove{
     end
 
     # check depth value and if it is smaller than 3 or lager then 20, return error
-    let (checkDepthRange : felt) = is_in_range(depth,3,20)
+    let (checkDepthRange : felt) = is_in_range(depth, 3, 20)
     if checkDepthRange == FALSE:
         with_attr error_message("Set the depth in range 3 to 20"):
             assert 1 = 0
@@ -980,33 +1149,35 @@ func applyMove{
     # Get piece at the from index
     # piece = (board >> ((_move >> 6) << 2)) & 0xF;
     let (piece_num, piece_color, piece_type) = getPiece(fromIndex)
-    let piece = Uint256(piece_num,0)
+    let piece = Uint256(piece_num, 0)
     let (bool : felt) = isLegalMove(fromIndex, toIndex)
 
     # check if the move is valid
-    with_attr error_message ("Illegal move"):
+    with_attr error_message("Illegal move"):
         assert bool = 1
     end
 
     let (curr_board : Uint256) = board.read()
-    let largest_uint = Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+    let largest_uint = Uint256(
+        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+    )
 
     # apply the move
     # Replace 4 bits at the from index with 0000
     # _board &= type(uint256).max ^ (0xF << (fromIndex << 2));
 
-    let (fromIndex_shifted) = uint256_shl(fromIndex, Uint256(2,0))
-    let (temp1) = uint256_shl(Uint256(0xF,0), fromIndex_shifted)
+    let (fromIndex_shifted) = uint256_shl(fromIndex, Uint256(2, 0))
+    let (temp1) = uint256_shl(Uint256(0xF, 0), fromIndex_shifted)
     let (temp2) = uint256_xor(largest_uint, temp1)
     let (from_0000) = uint256_and(curr_board, temp2)
 
     # let (from_0 : Uint256) = uint256_shl(Uint256(0,0), fromIndex)
     # let (from_0000 : Uint256) = uint256_or(curr_board, from_0)
-    
+
     # Replace 4 bits at the to index with 0000
     # _board &= type(uint256).max ^ (0xF << (toIndex << 2));
-    let (toIndex_shifted) = uint256_shl(toIndex, Uint256(2,0))
-    let (temp4) = uint256_shl(Uint256(0xF,0), toIndex_shifted)
+    let (toIndex_shifted) = uint256_shl(toIndex, Uint256(2, 0))
+    let (temp4) = uint256_shl(Uint256(0xF, 0), toIndex_shifted)
     let (temp5) = uint256_xor(largest_uint, temp4)
     let (to_0000 : Uint256) = uint256_and(from_0000, temp5)
 
@@ -1015,12 +1186,16 @@ func applyMove{
     let (to_piece) = uint256_shl(piece, toIndex_shifted)
     let (board_after_move : Uint256) = uint256_or(to_0000, to_piece)
     # rotate the board
-    let (board_after_rotate : Uint256) = rotate(board_after_move)
+    let (boardAfterRotate : Uint256) = rotate(board_after_move)
 
-    board.write(board_after_rotate)
+    board.write(boardAfterRotate)
+    testBoardRotate.write(boardAfterRotate)
 
     # play AI's turn and check is it over
-    let (isItOver : felt) = IAi.aiApplyMove(aiAddress,Uint256(depth,0))
+    let (boardAfterAiPlay : Uint256, isItOver : felt) = IAi.aiApplyMove(aiAddress,boardAfterRotate,Uint256(depth,0))
+
+    board.write(boardAfterAiPlay)
+
     if isItOver == TRUE:
         return (isItOver)
     else:
@@ -1030,10 +1205,9 @@ func applyMove{
         let (firstItem : Uint256) = movesArray.read(0)
         # information of the index is exist in firstItem's first 4 bits
         # so do the firstItem >> 252
-        let (getIndex : Uint256) = uint256_shr(firstItem,Uint256(252,0))
+        let (getIndex : Uint256) = uint256_shr(firstItem, Uint256(252, 0))
         clearMovesArray(getIndex.low)
 
         return (isItOver)
     end
-    
 end

@@ -1,14 +1,79 @@
 # StarkNet-Hackathon-Chess
 
-a fully On-Chain chess game built on the StarkNet
+A fully on-chain player-vs-AI chess game built on StarkNet
 
 ## play the game 
 go to website: 
+View chess board contract: 
+View AI player contract: 
 
-- A 6x6 simplified chess (each side gets one knight and one bishop).
+## Game Rules
+
+                    Black
+                 ♜ ♝ ♛ ♚ ♝ ♜
+                 ♟ ♟ ♟ ♟ ♟ ♟
+
+                 ♙ ♙ ♙ ♙ ♙ ♙
+                 ♖ ♘ ♕ ♔ ♘ ♖
+                    White
+
+- A 6x6 simplified chess board (each side has one knight, one bishop, and six pawns)
+- Player plays against an AI engine that can be adjusted to different game depths as defined by the player
+    - The value `depth` can range from 3 to 20. 
+    - The larger the `depth` value is, the more intelligent the AI becomes.
+    - Larger `depth` value also comes with higher gas fees, but is generally affordable on StarkNet.
+- The game automatically terminates when checkmate is found by an engine. 
+
+## A Gas-optimized Game
+| Creatively used bitpacking 
+
+### chess board representation
+- The chess board is bitpacked into an Uint256 value. 
+
+The board is an 8x8 representation of a 6x6 chess board. For efficiency, all information is
+bitpacked into a single uint256. Thus, unlike typical implementations, board positions are
+accessed via bit shifts and bit masks, as opposed to array accesses. Since each piece is 4 bits,
+there are 64 ``indices'' to access:
+                                    |63|62|61|60|59|58|57|56
+                                    |55|54|53|52|51|50|49|48
+                                    47 46 45 44 43 42 41 40
+                                    39 38 37 36 35 34 33 32
+                                    31 30 29 28 27 26 25 24
+                                    23 22 21 20 19 18 17 16
+                                    15 14 13 12 11 10 09 08
+                                    07 06 05 04 03 02 01 00
+All numbers in the figure above are in decimal representation.
+For example, the piece at index 2 is accessed with ``(board >> (27 << 2)) & 'OxF'.
+///
+The top/bottom rows and left/right columns are treated as sentinel rows/columns for efficient
+boundary validation (see {Chess-generateMoves} and {Chess-isValid}). i.e., (63, ..., 56),
+(07, ..., 00), (63, ..., 07), and (56, ..., 00) never contain pieces. Every bit in those rows
+and columns should be ignored, except for the last bit. The last bit denotes whose turn it is to
+play (0 means black's turn; 1 means white's turn). e.g. a potential starting position:
+
+### chess piece representation
+- Each chess piece is defined with 4 bits as follows:
+    The first bit denotes the color: 0 means black; 1 means white).
+    The last 3 bits denote the type:
+            | Bits | # | Type   |
+            | ---- | - | ------ |
+            | 000  | 0 | Empty  |
+            | 001  | 1 | Pawn   |
+            | 010  | 2 | Bishop |
+            | 011  | 3 | Rook   |
+            | 100  | 4 | Knight |
+            | 101  | 5 | Queen  |
+            | 110  | 6 | King   |
+
+    - for example, a black Knight is represented by 0100, a white Bishop is represented by 1010, etc. 
+
+- the program automatically assigns white to player and black to AI. 
+
 - Highly efficient program, using bitpacking to represent chess moves. 
-- Can play against an AI player. You can manually define the depth of the game, and the AI player will adjust accordingly; The larger the depth value is, the more intelligent the AI becomes. It also costs more gas fee but is quite affordable on StarkNet overall.  
+- Can play against an AI player. You can manually define the depth of the game, and the AI player will adjust accordingly;
 
-The game rules are defined in chess_board.cairo. 
-The AI decision-making machine is defined in ai_player.cairo
+## Program Architecture
+- The game rules are defined in chess_board.cairo. 
+- The AI decision-making machine is defined in ai_player.cairo
 
+> made with soul at StarkNet House Hackathon, 08.16.2022

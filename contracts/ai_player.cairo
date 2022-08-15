@@ -29,18 +29,18 @@ const FALSE = 0
 # AI player functions
 @external
 func aiApplyMove{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr,bitwise_ptr : BitwiseBuiltin*
-}(depth : Uint256) -> (canMove : felt):
+}(depth : Uint256) -> (isOver : felt):
 
     alloc_locals
     # searchMove returns bestMove 
     # if bestMove is 0, then no move is available
     # else apply Best Move.
     let (board_status : Uint256) = board.read()
-    let (bestMove, canMove) = searchMove(board_status, depth)
+    let (bestMove, isOver) = searchMove(board_status, depth)
 
     # if AI can't move anywhere, then the game is over
-    if canMove == FALSE:
-        return (canMove)
+    if isOver == TRUE:
+        return (isOver)
     end
     
     let (temp1 : Uint256) = uint256_shr(bestMove,Uint256(6,0))
@@ -49,7 +49,7 @@ func aiApplyMove{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_pt
 
     applyMove(fromIndex, toIndex)
 
-    return(TRUE)
+    return(FALSE)
 end
 
 func searchMove{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr,bitwise_ptr : BitwiseBuiltin*
@@ -59,14 +59,14 @@ func searchMove{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr
     # initialized values? @Yetta board and movesArray
     let (movesArray) = generateMove(36, Uint256(0x238A179D71B69959551349138D30B289,0xDB5D33CB1BADB2BAA99A59))
     if movesArray.low == 0:
-        return (Uint256(0,0), FALSE)
+        return (Uint256(0,0), TRUE)
     end
     let (bestScore,bestMove) = rec1(board, Uint256(0,0), depth)
     let (bool : felt) = is_le(bestScore,-1261)
     if bool==TRUE:
-        return (Uint256(0,0), FALSE)
+        return (Uint256(0,0), TRUE)
     end
-    return (bestMove, TRUE)
+    return (bestMove, FALSE)
 end
 
 func rec1{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr,bitwise_ptr : BitwiseBuiltin*

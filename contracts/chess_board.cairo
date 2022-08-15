@@ -4,7 +4,7 @@
 
 from starkware.cairo.common.alloc import alloc
 from starkware.cairo.common.math import unsigned_div_rem, assert_not_zero
-from starkware.cairo.common.math_cmp import is_le
+from starkware.cairo.common.math_cmp import is_le, is_in_range
 from starkware.cairo.common.bitwise import bitwise_xor
 from starkware.cairo.common.cairo_builtins import HashBuiltin, BitwiseBuiltin
 from starkware.cairo.common.find_element import search_sorted
@@ -22,6 +22,8 @@ from starkware.cairo.common.uint256 import (
     uint256_signed_div_rem,
     Uint256,
 )
+
+from contracts.IAi import IAi
 
 #bool
 const TRUE = 1
@@ -43,6 +45,17 @@ const KING = 6
 func board() -> (board : Uint256):
 end
 
+@storage_var
+func aiContractAddress() -> (address : felt):
+end
+
+@external
+func setAiAddress{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr
+}(address : felt):
+    aiContractAddress.write(address)
+    return()
+end
+
 # func getAdjustedIndex(index : Uint256) -> (adjusted_index : Uint256):
 #     let (adjusted_index : Uint256) = index.low
 #     return(adjusted_index)
@@ -60,6 +73,21 @@ func getMovesArray{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_
 }(index : felt) -> (move : Uint256):
     let (res) = movesArray.read(index)
     return (res)
+end
+
+# clear MovesArray
+func clearMovesArray{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr
+}(index : felt):
+
+    if index == 0:
+        movesArray.write(0,Uint256(0,0))
+        return ()
+    end
+
+    clearMovesArray(index - 1)
+    movesArray.write(index,Uint256(0,0))
+    return ()
+    
 end
 
 
@@ -935,9 +963,26 @@ func applyMove{
     pedersen_ptr : HashBuiltin*,
     range_check_ptr,
     bitwise_ptr : BitwiseBuiltin*
-    }(fromIndex:Uint256, toIndex:Uint256) -> ():
+    }(fromIndex : Uint256, toIndex : Uint256, depth : felt) -> (isItOver : felt):
 
     alloc_locals
+
+    # check AI player's contract address and if it is empty, return error
+    let (aiAddress : felt) = aiContractAddress.read()
+    if aiAddress == 0:
+        with_attr error_message("Set the AI player's contract address first"):
+            assert 1 = 0
+        end
+    end
+
+    # check depth value and if it is smaller than 3 or lager then 20, return error
+    let (checkDepthRange : felt) = is_in_range(depth,3,20)
+    if checkDepthRange == FALSE:
+        with_attr error_message("Set the depth in range 3 to 20"):
+            assert 1 = 0
+        end
+    end
+
     # Get piece at the from index
     # piece = (board >> ((_move >> 6) << 2)) & 0xF;
     let (piece_num, piece_color, piece_type) = getPiece(fromIndex)
@@ -979,12 +1024,22 @@ func applyMove{
     let (board_after_rotate : Uint256) = rotate(board_after_move)
 
     board.write(board_after_rotate)
-    
-    # IEngine.makeMove(
-    #         contract_address=ENGINE_ADDRESS, board=board
-    #     )
-    
-    return ()
 
+    # play AI's turn and check is it over
+    let (isItOver : felt) = IAi.aiApplyMove(aiAddress,Uint256(depth,0))
+    if isItOver == TRUE:
+        return (isItOver)
+    else:
+        # should clear movesArray
+        # by doing this here, we can reduce storage_val.write
+        # get first item from the movesArray
+        let (firstItem : Uint256) = movesArray.read(0)
+        # information of the index is exist in firstItem's first 4 bits
+        # so do the firstItem >> 252
+        let (getIndex : Uint256) = uint256_shr(firstItem,Uint256(252,0))
+        clearMovesArray(getIndex.low)
+
+        return (isItOver)
+    end
     
 end

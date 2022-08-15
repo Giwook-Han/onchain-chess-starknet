@@ -20,7 +20,7 @@ from starkware.cairo.common.uint256 import (
     uint256_signed_div_rem,
     Uint256,
 )
-from contracts.chess_board import board, movesArray, getMovesArray, rotate, applyMove, generateMove, appendMoves, checkKnightNKingsMove, checkSlidingPiecesMove
+from contracts.chess_board import board, movesArray, getPiece, getMovesArray, isLegalMove, rotate, applyMove, generateMove, appendMoves, checkKnightNKingsMove, checkSlidingPiecesMove
 
 const TRUE = 1
 const FALSE = 0
@@ -43,14 +43,70 @@ func aiApplyMove{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_pt
         return (isOver)
     end
     
-    let (temp1 : Uint256) = uint256_shr(bestMove,Uint256(6,0))
-    let (fromIndex : Uint256) = uint256_and(temp1,Uint256(0x3F,0))
+    # get first 6bits from the bestMove (111111000000 = 0xFC0)
+    let (fromIndex : Uint256) = uint256_and(bestMove,Uint256(0xFC0,0))
+    # get last 6bits from the bestMove
     let (toIndex : Uint256) = uint256_and(bestMove,Uint256(0x3F,0))
 
-    applyMove(fromIndex, toIndex)
+    applyMove_forAI(fromIndex, toIndex)
 
     return(FALSE)
 end
+
+# apply Move but don't trigger the state change. 
+func applyMove_forAI{
+    syscall_ptr : felt*,
+    pedersen_ptr : HashBuiltin*,
+    range_check_ptr,
+    bitwise_ptr : BitwiseBuiltin*
+    }(fromIndex : Uint256, toIndex : Uint256) -> ():
+
+    alloc_locals
+
+    # Get piece at the from index
+    # piece = (board >> ((_move >> 6) << 2)) & 0xF;
+    let (piece_num, piece_color, piece_type) = getPiece(fromIndex)
+    let piece = Uint256(piece_num,0)
+    let (bool : felt) = isLegalMove(fromIndex, toIndex)
+
+    # check if the move is valid
+    with_attr error_message ("Illegal move"):
+        assert bool = 1
+    end
+
+    let (curr_board : Uint256) = board.read()
+    let largest_uint = Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+
+    # apply the move
+    # Replace 4 bits at the from index with 0000
+    # _board &= type(uint256).max ^ (0xF << (fromIndex << 2));
+
+    let (fromIndex_shifted) = uint256_shl(fromIndex, Uint256(2,0))
+    let (temp1) = uint256_shl(Uint256(0xF,0), fromIndex_shifted)
+    let (temp2) = uint256_xor(largest_uint, temp1)
+    let (from_0000) = uint256_and(curr_board, temp2)
+
+    # let (from_0 : Uint256) = uint256_shl(Uint256(0,0), fromIndex)
+    # let (from_0000 : Uint256) = uint256_or(curr_board, from_0)
+    
+    # Replace 4 bits at the to index with 0000
+    # _board &= type(uint256).max ^ (0xF << (toIndex << 2));
+    let (toIndex_shifted) = uint256_shl(toIndex, Uint256(2,0))
+    let (temp4) = uint256_shl(Uint256(0xF,0), toIndex_shifted)
+    let (temp5) = uint256_xor(largest_uint, temp4)
+    let (to_0000 : Uint256) = uint256_and(from_0000, temp5)
+
+    # Place the piece at the to index
+    # _board |= (piece << (toIndex << 2))
+    let (to_piece) = uint256_shl(piece, toIndex_shifted)
+    let (board_after_move : Uint256) = uint256_or(to_0000, to_piece)
+    # rotate the board
+    let (board_after_rotate : Uint256) = rotate(board_after_move)
+
+    board.write(board_after_rotate)    
+    return()
+end
+
 
 func searchMove{syscall_ptr : felt*,pedersen_ptr : HashBuiltin*, range_check_ptr,bitwise_ptr : BitwiseBuiltin*
 }(board : Uint256, depth : Uint256) -> (bestMove : Uint256, bool : felt):

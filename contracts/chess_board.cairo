@@ -155,9 +155,7 @@ end
 # along a direction vector from one index to another
 # every Argument is smaller than 2**128
 func searchRay{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
-}(fromIndex : Uint256, toIndex : Uint256, directionVector : felt) -> (
-    bool : felt
-):
+}(fromIndex : Uint256, toIndex : Uint256, directionVector : felt) -> (bool : felt):
     alloc_locals
 
     local indexChange = 0
@@ -911,12 +909,6 @@ func isValid{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, 
 end
 
 
-@contract_interface
-namespace IEngine:
-    func makeMove(board:felt) -> (value):
-    end
-end
-
 @constructor
 func constructor{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, bitwise_ptr : BitwiseBuiltin*
 }():
@@ -930,8 +922,10 @@ func constructor{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_p
     #8 0000 0000 0000 0000 0000 0000 0000 0000
 
     # binary: 0000000000000000000000000000000000000011001001010110010000110000000000010001000100010001000100000000000000000000000000000000000000000000000000000000000000000000000010011001100110011001100100000000101110101101111011001011000000000000000000000000000000000000
-    let initial = 331318787292356502577094498346479229205088297258959912939892506624
     # hex: 3256430011111100000000000000000099999900BADECB000000000
+    let initial : Uint256 = Uint256(0x00000000099999900BADECB000000000,0x32564300111111000000000)
+    board.write(initial)
+
     return()
 end
 

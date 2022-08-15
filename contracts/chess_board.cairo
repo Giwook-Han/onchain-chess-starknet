@@ -386,6 +386,7 @@ func isValid{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr, 
 
 end
 
+
 @contract_interface
 namespace IEngine:
     func makeMove(board:felt) -> (value):
@@ -420,6 +421,17 @@ end
 #                       00 11 12 13 14 12 11 00                 ♖ ♘ ♕ ♔ ♘ ♖
 #                       00 00 00 00 00 00 00 *01*                    White
 #                                White
+
+@view
+func getBoardStatus{
+    syscall_ptr : felt*,
+    pedersen_ptr : HashBuiltin*,
+    range_check_ptr
+    }() -> (res : Uint256):
+
+    let (res) = board.read()
+    return(res)
+end
 
 @external 
 func applyMove{
@@ -461,20 +473,7 @@ func applyMove{
     #         contract_address=ENGINE_ADDRESS, board=board
     #     )
     
-return ()
+    return ()
 
     
-end 
-
-@view
-func getBoardStatus{
-    syscall_ptr : felt*,
-    pedersen_ptr : HashBuiltin*,
-    range_check_ptr
-    }() -> (res : Uint256):
-
-    let (res) = board.read()
-    return(res)
-
 end
-

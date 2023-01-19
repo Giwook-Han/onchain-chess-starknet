@@ -42,6 +42,16 @@
 ///              7 0000 1011 1010 1101 1110 1100 1011 0000
 ///              8 0000 0000 0000 0000 0000 0000 0000 0001 <- this 4 bits determines which player is in turn
 
+///              1 0000 0000 0000 0000 0000 0000 0000 0000 
+///              2 0000 0000 0010 0101 0110 0011 0011 0000
+///              3 0000 0001 0001 0001 0001 0001 0001 0000
+///              4 0000 0000 0000 0000 0000 0000 0000 0000
+///              5 0000 0000 0000 0000 0000 0000 1001 0000
+///              6 0000 1001 1001 1001 1001 1001 0000 0000 
+///              7 0000 1011 1010 1101 1110 1100 1011 0000 
+///              8 0000 0000 0000 0000 0000 0000 0000 0001
+///
+
 /// there are 64 ``indices'' to access:
 ///                       63 62 61 60 59 58 57 56
 ///                       55 54 53 52 51 50 49 48
@@ -541,7 +551,6 @@ func apply_move{
         tempvar range_check_ptr = range_check_ptr;
         tempvar bitwise_ptr: BitwiseBuiltin* = bitwise_ptr;
     } else{
-        assert 1 = 0;
         // avoid revoked refer
         tempvar syscall_ptr: felt* = syscall_ptr;
         tempvar pedersen_ptr: HashBuiltin* = pedersen_ptr;
@@ -1138,19 +1147,11 @@ func check_sliding_pieces_move{
     return (new_move_info = result);
 }
 
-func searchMove{
+
+func search_best_move{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
 }(board: Uint256, depth: Uint256) -> (bestMove: Uint256, bool: felt) {
-    alloc_locals;
-    // github copilot please stop
-    // initialized values? @Yetta board and moves_array
-    let (moves_array) = gen_move(
-        36, Uint256(0x238A179D71B69959551349138D30B289, 0xDB5D33CB1BADB2BAA99A59)
-    );
 
-    if (moves_array.low == 0) {
-        return (Uint256(0, 0), TRUE);
-    }
     let (bestScore, bestMove) = rec1(board, Uint256(0, 0), depth);
     let bool: felt = is_le(bestScore, -1261);
     if (bool == TRUE) {
@@ -1752,16 +1753,34 @@ func simGet_piece{
 //
 
 // AI player functions
+
+// searchMove every possible move
+@external
+func searchMove{
+    syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
+}() {
+    alloc_locals;
+    // github copilot please stop
+    // initialized values? @Yetta board and moves_array
+    let (moves_array) = gen_move(
+        36, Uint256(0x238A179D71B69959551349138D30B289, 0xDB5D33CB1BADB2BAA99A59)
+    );
+
+    return ();
+}
+
+// AI player functions
 @external
 func ai_apply_move{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
 }(depth: Uint256) -> (boardAfterPlay: Uint256, isOver: felt) {
     alloc_locals;
-    // searchMove returns bestMove
+    
+    // search_best_move returns bestmoves
     // if bestMove is 0, then no move is available
     // else apply Best Move.
     let (board_status : Uint256) = get_board_status();
-    let (bestMove, isOver) = searchMove(board_status, depth);
+    let (bestMove, isOver) = search_best_move(board_status,depth);
 
     // if AI can't move anywhere, then the game is over
     if (isOver == TRUE) {
